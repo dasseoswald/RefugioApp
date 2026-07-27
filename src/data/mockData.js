@@ -1,8 +1,11 @@
 /**
- * Mock data layer for ChurchAttend.
- * Simulates Supabase backend with in-memory data.
- * Replace this module with real Supabase calls when ready.
+ * Data layer for ChurchAttend.
+ * Miembros y Usuarios se sincronizan con Cloud Firestore (compartidos entre
+ * todos los dispositivos/usuarios). El resto de las "tablas" sigue en
+ * memoria + localStorage por ahora, pendiente de migración.
  */
+import { db } from '../firebase.js'
+import { collection, doc, setDoc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore'
 
 export const OPERATIONAL_GROUPS = [
     { id: 'escuela-discipulo', name: 'Escuela del Discípulo', field: 'escuela_discipulo', icon: 'BookOpen' },
@@ -15,7 +18,7 @@ export const OPERATIONAL_GROUPS = [
     { id: 'refugios', name: 'Refugios', field: 'grupo_refugios', icon: 'Home' },
 ]
 
-const MEMBERS = [
+let MEMBERS = [
     { id: '1', full_name: 'María García López', birth_date: '1985-03-15', gender: 'F', civil_status: 'Casado', member_type: 'Miembro Activo', phone: '+591 789-1234', email: 'maria@iglesia.com', photo_url: null, is_active: true, created_at: '2024-01-10', groups: ['Escuela del Discípulo'], escuela_discipulo: true, escuela_discipulo_level: 1 },
     { id: '2', full_name: 'Carlos Mendoza Ruiz', birth_date: '1990-07-22', gender: 'M', civil_status: 'Soltero', member_type: 'Servidor', phone: '+591 789-5678', email: 'carlos@iglesia.com', photo_url: null, is_active: true, created_at: '2024-02-15', groups: ['Buena Tierra'], buena_tierra: true },
     { id: '3', full_name: 'Ana Sofía Torrez', birth_date: '1978-11-30', gender: 'F', civil_status: 'Casado', member_type: 'Líder', phone: '+591 789-9012', email: 'ana@iglesia.com', photo_url: null, is_active: true, created_at: '2023-06-20', groups: ['Escuela del Discípulo'], escuela_discipulo: true, escuela_discipulo_level: 1 },
@@ -123,7 +126,7 @@ function generateAttendances() {
 
 const ATTENDANCES = generateAttendances()
 
-const USERS = [
+let USERS = [
     { id: 'user-1', email: 'dasse.oswald@gmail.com', role: 'admin', member_id: '5', name: 'Oswald Dassé', photo_url: null },
     { id: 'user-2', email: 'controller@churchattend.com', role: 'controller', member_id: '3', name: 'Ana Sofía Torrez', photo_url: null },
     { id: 'user-3', email: 'attendee@churchattend.com', role: 'attendee', member_id: '1', name: 'María García', photo_url: null },
@@ -147,9 +150,24 @@ export function getMemberByEmail(email) {
     return MEMBERS.find(m => m.email && m.email.toLowerCase() === email.toLowerCase()) || null
 }
 
+function memberDocRef(id) { return doc(db, 'members', id) }
+
+// Aplica un cambio parcial a un miembro: actualiza la caché local al instante
+// (misma UX de siempre) y además lo graba en Firestore para que sea visible
+// para todos los demás usuarios/dispositivos.
+function patchMember(id, patch) {
+    const index = MEMBERS.findIndex(m => m.id === id)
+    if (index === -1) return null
+    const updated = { ...MEMBERS[index], ...patch }
+    MEMBERS = MEMBERS.map((m, i) => (i === index ? updated : m))
+    updateDoc(memberDocRef(id), patch).catch(err => console.error('No se pudo sincronizar el miembro', err))
+    return updated
+}
+
 export function createMember(data) {
-    const newMember = { ...data, id: `${MEMBERS.length + 1}`, created_at: new Date().toISOString(), is_active: true }
-    
+    const id = `mem-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    const newMember = { ...data, id, created_at: new Date().toISOString(), is_active: true }
+
     // Auto-asignación a múltiples ministerios
     if (data.groups && Array.isArray(data.groups)) {
         data.groups.forEach(groupName => {
@@ -161,7 +179,9 @@ export function createMember(data) {
         })
     }
 
-    MEMBERS.push(newMember)
+    MEMBERS = [...MEMBERS, newMember]
+    const { id: _id, ...rest } = newMember
+    setDoc(memberDocRef(id), rest).catch(err => console.error('No se pudo guardar el miembro', err))
     return newMember
 }
 
@@ -170,7 +190,7 @@ export function updateMember(id, data) {
     if (index === -1) return null
 
     const updatedMember = { ...MEMBERS[index], ...data }
-    
+
     // Resetear todas las banderas de grupos operativos
     OPERATIONAL_GROUPS.forEach(g => {
         updatedMember[g.field] = false
@@ -189,15 +209,16 @@ export function updateMember(id, data) {
         })
     }
 
-    MEMBERS[index] = updatedMember
+    MEMBERS = MEMBERS.map((m, i) => (i === index ? updatedMember : m))
+    const { id: _id, ...rest } = updatedMember
+    updateDoc(memberDocRef(id), rest).catch(err => console.error('No se pudo sincronizar el miembro', err))
     return updatedMember
 }
 
 export function toggleMemberActive(id) {
     const member = MEMBERS.find(m => m.id === id)
     if (!member) return null
-    member.is_active = !member.is_active
-    return member
+    return patchMember(id, { is_active: !member.is_active })
 }
 
 export function getServices() { return [...SERVICES] }
@@ -292,6 +313,8 @@ export function getUserById(id) { return USERS.find(u => u.id === id) || null }
 
 export function getUserByEmail(email) { return USERS.find(u => u.email === email) || null }
 
+function userDocRef(id) { return doc(db, 'users', id) }
+
 export function createUser(data) {
     if (getUserByEmail(data.email)) {
         return { error: 'Ya existe un usuario con ese correo electrónico' }
@@ -304,7 +327,9 @@ export function createUser(data) {
         member_id: data.member_id || null,
         photo_url: null,
     }
-    USERS.push(newUser)
+    USERS = [...USERS, newUser]
+    const { id, ...rest } = newUser
+    setDoc(userDocRef(id), rest).catch(err => console.error('No se pudo guardar el usuario', err))
     return { data: newUser }
 }
 
@@ -319,7 +344,10 @@ export function createOrGetUserForFirebaseAccount({ email, displayName, photoURL
     const existingUser = getUserByEmail(email)
     if (existingUser) {
         if (photoURL && existingUser.photo_url !== photoURL) {
-            existingUser.photo_url = photoURL
+            const updated = { ...existingUser, photo_url: photoURL }
+            USERS = USERS.map(u => (u.id === existingUser.id ? updated : u))
+            updateDoc(userDocRef(existingUser.id), { photo_url: photoURL }).catch(err => console.error('No se pudo sincronizar el usuario', err))
+            return updated
         }
         return { ...existingUser }
     }
@@ -347,15 +375,19 @@ export function createOrGetUserForFirebaseAccount({ email, displayName, photoURL
         member_id: member.id,
         photo_url: photoURL || null,
     }
-    USERS.push(newUser)
+    USERS = [...USERS, newUser]
+    const { id, ...rest } = newUser
+    setDoc(userDocRef(id), rest).catch(err => console.error('No se pudo guardar el usuario', err))
     return { ...newUser }
 }
 
 export function updateUserProfile(userId, data) {
     const index = USERS.findIndex(u => u.id === userId)
     if (index === -1) return null
-    USERS[index] = { ...USERS[index], ...data }
-    return { ...USERS[index] }
+    const updated = { ...USERS[index], ...data }
+    USERS = USERS.map((u, i) => (i === index ? updated : u))
+    updateDoc(userDocRef(userId), data).catch(err => console.error('No se pudo sincronizar el usuario', err))
+    return { ...updated }
 }
 
 export function getSystemSettings() { return { ...SYSTEM_SETTINGS } }
@@ -586,22 +618,14 @@ export function enrollInEscuela(memberId, level) {
     } else {
         ESCUELA_ENROLLMENTS.push({ member_id: memberId, level })
     }
-    const member = MEMBERS.find(m => m.id === memberId)
-    if (member) {
-        member.escuela_discipulo = true
-        member.escuela_discipulo_level = level
-    }
+    patchMember(memberId, { escuela_discipulo: true, escuela_discipulo_level: level })
     return { member_id: memberId, level }
 }
 
 export function removeFromEscuela(memberId) {
     const idx = ESCUELA_ENROLLMENTS.findIndex(e => e.member_id === memberId)
     if (idx !== -1) ESCUELA_ENROLLMENTS.splice(idx, 1)
-    const member = MEMBERS.find(m => m.id === memberId)
-    if (member) {
-        member.escuela_discipulo = false
-        member.escuela_discipulo_level = null
-    }
+    patchMember(memberId, { escuela_discipulo: false, escuela_discipulo_level: null })
 }
 
 export function getEscuelaAttendances(classId) {
@@ -668,8 +692,7 @@ export function deleteRefugio(id) {
 
     for (let i = REFUGIO_ENROLLMENTS.length - 1; i >= 0; i--) {
         if (REFUGIO_ENROLLMENTS[i].refugio_id === id) {
-            const member = MEMBERS.find(m => m.id === REFUGIO_ENROLLMENTS[i].member_id)
-            if (member) member.grupo_refugios = false
+            patchMember(REFUGIO_ENROLLMENTS[i].member_id, { grupo_refugios: false })
             REFUGIO_ENROLLMENTS.splice(i, 1)
         }
     }
@@ -685,16 +708,14 @@ export function enrollInRefugio(memberId, refugioId) {
     } else {
         REFUGIO_ENROLLMENTS.push({ member_id: memberId, refugio_id: refugioId })
     }
-    const member = MEMBERS.find(m => m.id === memberId)
-    if (member) member.grupo_refugios = true
+    patchMember(memberId, { grupo_refugios: true })
     return { member_id: memberId, refugio_id: refugioId }
 }
 
 export function removeFromRefugio(memberId) {
     const idx = REFUGIO_ENROLLMENTS.findIndex(e => e.member_id === memberId)
     if (idx !== -1) REFUGIO_ENROLLMENTS.splice(idx, 1)
-    const member = MEMBERS.find(m => m.id === memberId)
-    if (member) member.grupo_refugios = false
+    patchMember(memberId, { grupo_refugios: false })
 }
 
 export function getMemberRefugio(memberId) {
@@ -1045,8 +1066,11 @@ export function setEventRegistrationPaymentMethod(registrationId, method) {
 
 const STORAGE_KEY = 'churchattend_mock_db_v1'
 
+// Nota: MEMBERS y USERS ya NO se guardan aquí — viven en Firestore (ver
+// más abajo "Sincronización con Firestore"), compartidos entre todos los
+// dispositivos. El resto de las "tablas" sigue en memoria + localStorage.
 const COLLECTIONS = {
-    MEMBERS, SERVICES, ATTENDANCES, USERS, SYSTEM_SETTINGS,
+    SERVICES, ATTENDANCES, SYSTEM_SETTINGS,
     ESCUELA_CLASSES, ESCUELA_ATTENDANCES, ESCUELA_ENROLLMENTS,
     REFUGIOS, REFUGIO_ENROLLMENTS,
     MEMBER_PROFILES, PROFILE_NOTES,
@@ -1095,3 +1119,68 @@ window.addEventListener('beforeunload', saveToStorage)
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) saveToStorage()
 })
+
+// ---- Sincronización con Firestore (Miembros y Usuarios) ----
+// MEMBERS y USERS se mantienen en tiempo real con Firestore, compartidos
+// entre todos los dispositivos. La primera vez que la colección está vacía,
+// se siembra con los datos base definidos arriba.
+// Las reglas de seguridad exigen un usuario autenticado, así que la
+// suscripción se inicia recién cuando AuthContext confirma el login
+// (startCoreDataSync), no al cargar el módulo.
+
+let resolveCoreDataReady
+export const coreDataReadyPromise = new Promise((resolve) => { resolveCoreDataReady = resolve })
+let membersFirstLoad = true
+let usersFirstLoad = true
+let coreSyncStarted = false
+
+function checkCoreDataReady() {
+    if (!membersFirstLoad && !usersFirstLoad) resolveCoreDataReady()
+}
+
+export function startCoreDataSync() {
+    if (coreSyncStarted) return
+    coreSyncStarted = true
+
+    onSnapshot(collection(db, 'members'), async (snap) => {
+        if (snap.empty && membersFirstLoad) {
+            try {
+                const batch = writeBatch(db)
+                MEMBERS.forEach(m => {
+                    const { id, ...rest } = m
+                    batch.set(doc(db, 'members', id), rest)
+                })
+                await batch.commit()
+            } catch (e) { console.error('No se pudieron sembrar los miembros iniciales', e) }
+            return
+        }
+        MEMBERS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        membersFirstLoad = false
+        checkCoreDataReady()
+    }, (err) => {
+        console.error('Error sincronizando miembros', err)
+        membersFirstLoad = false
+        checkCoreDataReady()
+    })
+
+    onSnapshot(collection(db, 'users'), async (snap) => {
+        if (snap.empty && usersFirstLoad) {
+            try {
+                const batch = writeBatch(db)
+                USERS.forEach(u => {
+                    const { id, ...rest } = u
+                    batch.set(doc(db, 'users', id), rest)
+                })
+                await batch.commit()
+            } catch (e) { console.error('No se pudieron sembrar los usuarios iniciales', e) }
+            return
+        }
+        USERS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        usersFirstLoad = false
+        checkCoreDataReady()
+    }, (err) => {
+        console.error('Error sincronizando usuarios', err)
+        usersFirstLoad = false
+        checkCoreDataReady()
+    })
+}

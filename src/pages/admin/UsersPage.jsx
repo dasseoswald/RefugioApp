@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { getUsers, getMembers, createUser } from '../../data/mockData.js'
+import { getUsers, getMembers, createUser, updateUserProfile } from '../../data/mockData.js'
 import UserAvatar from '../../components/ui/UserAvatar.jsx'
 import Modal from '../../components/ui/Modal.jsx'
 import { Shield, UserPlus, Edit2, Mail, UserCheck, CheckCircle2 } from 'lucide-react'
@@ -63,6 +63,13 @@ export default function UsersPage() {
         showNotification(`Usuario ${result.data.name} creado como ${roleConfig[result.data.role].label}`)
     }
 
+    const handleChangeRole = (targetUser, newRole) => {
+        if (newRole === targetUser.role) return
+        updateUserProfile(targetUser.id, { role: newRole })
+        refreshData()
+        showNotification(`${targetUser.name} ahora es ${roleConfig[newRole].label}`)
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -107,12 +114,26 @@ export default function UsersPage() {
                                     </div>
                                 </div>
                             </div>
-                            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-                                <span className="text-xs px-3 py-1.5 rounded-full font-semibold" style={{ background: role.bg, color: role.color }}>
-                                    <Shield className="w-3 h-3 inline mr-1" />{role.label}
-                                </span>
+                            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between gap-2">
+                                {user.id === currentUser?.id ? (
+                                    <span className="text-xs px-3 py-1.5 rounded-full font-semibold" style={{ background: role.bg, color: role.color }}>
+                                        <Shield className="w-3 h-3 inline mr-1" />{role.label}
+                                    </span>
+                                ) : (
+                                    <select
+                                        value={user.role}
+                                        onChange={(e) => handleChangeRole(user, e.target.value)}
+                                        className="text-xs px-2.5 py-1.5 rounded-full font-semibold border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-1"
+                                        style={{ background: role.bg, color: role.color }}
+                                        title="Cambiar rol"
+                                    >
+                                        <option value="attendee">Asistente</option>
+                                        <option value="controller">Controlador</option>
+                                        <option value="admin">Administrador</option>
+                                    </select>
+                                )}
                                 {member && (
-                                    <span className="text-xs text-[#6E6E6E] flex items-center gap-1">
+                                    <span className="text-xs text-[#6E6E6E] flex items-center gap-1 flex-shrink-0">
                                         <UserCheck className="w-3.5 h-3.5" /> {member.member_type}
                                     </span>
                                 )}

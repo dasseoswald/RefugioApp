@@ -8,7 +8,7 @@ import {
     updateProfile as updateFirebaseProfile,
 } from 'firebase/auth'
 import { auth, googleProvider } from '../firebase.js'
-import { updateUserProfile, createOrGetUserForFirebaseAccount, updateMember } from '../data/mockData.js'
+import { updateUserProfile, createOrGetUserForFirebaseAccount, updateMember, coreDataReadyPromise, startCoreDataSync } from '../data/mockData.js'
 
 const AuthContext = createContext(null)
 
@@ -28,8 +28,10 @@ export function AuthProvider({ children }) {
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
+                startCoreDataSync()
+                await coreDataReadyPromise
                 const appUser = createOrGetUserForFirebaseAccount({
                     email: firebaseUser.email,
                     displayName: firebaseUser.displayName,
@@ -66,6 +68,8 @@ export function AuthProvider({ children }) {
         try {
             const cred = await createUserWithEmailAndPassword(auth, email, password)
             await updateFirebaseProfile(cred.user, { displayName: name })
+            startCoreDataSync()
+            await coreDataReadyPromise
             // onAuthStateChanged puede dispararse antes de que el displayName quede
             // guardado en Firebase, creando el registro local con el correo como
             // nombre; lo corregimos aquí una vez que sabemos el nombre real.
