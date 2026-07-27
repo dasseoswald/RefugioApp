@@ -8,9 +8,15 @@ import {
     updateProfile as updateFirebaseProfile,
 } from 'firebase/auth'
 import { auth, googleProvider } from '../firebase.js'
-import { updateUserProfile, createOrGetUserForFirebaseAccount, updateMember, coreDataReadyPromise, startCoreDataSync } from '../data/mockData.js'
+import { updateUserProfile, createOrGetUserForFirebaseAccount, coreDataReadyPromise, startCoreDataSync } from '../data/mockData.js'
 
 const AuthContext = createContext(null)
+
+// Nombre elegido en el formulario de registro, a la espera de que
+// onAuthStateChanged (única fuente de verdad para crear/vincular la cuenta)
+// lo recoja. Evita crear el usuario dos veces en paralelo (registro +
+// listener) cuando ambos intentan vincular la cuenta al mismo tiempo.
+let pendingRegistrationName = null
 
 const AUTH_ERROR_MESSAGES = {
     'auth/user-not-found': 'Correo o contraseña incorrectos.',
@@ -34,9 +40,10 @@ export function AuthProvider({ children }) {
                 await coreDataReadyPromise
                 const appUser = createOrGetUserForFirebaseAccount({
                     email: firebaseUser.email,
-                    displayName: firebaseUser.displayName,
+                    displayName: pendingRegistrationName || firebaseUser.displayName,
                     photoURL: firebaseUser.photoURL,
                 })
+                pendingRegistrationName = null
                 setUser(appUser)
             } else {
                 setUser(null)
@@ -66,21 +73,14 @@ export function AuthProvider({ children }) {
 
     const register = useCallback(async (name, email, password) => {
         try {
+            pendingRegistrationName = name
             const cred = await createUserWithEmailAndPassword(auth, email, password)
             await updateFirebaseProfile(cred.user, { displayName: name })
-            startCoreDataSync()
-            await coreDataReadyPromise
-            // onAuthStateChanged puede dispararse antes de que el displayName quede
-            // guardado en Firebase, creando el registro local con el correo como
-            // nombre; lo corregimos aquí una vez que sabemos el nombre real.
-            const appUser = createOrGetUserForFirebaseAccount({ email, displayName: name, photoURL: cred.user.photoURL })
-            if (name && appUser.name !== name) {
-                const fixedUser = updateUserProfile(appUser.id, { name })
-                if (appUser.member_id) updateMember(appUser.member_id, { full_name: name })
-                setUser(fixedUser)
-            }
+            // La creación/vinculación real del usuario la hace el listener
+            // onAuthStateChanged (arriba), que ya recogerá `pendingRegistrationName`.
             return { data: true }
         } catch (err) {
+            pendingRegistrationName = null
             return { error: AUTH_ERROR_MESSAGES[err.code] || 'No se pudo crear la cuenta. Inténtalo de nuevo.' }
         }
     }, [])

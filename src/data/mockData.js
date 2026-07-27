@@ -166,7 +166,7 @@ function patchMember(id, patch) {
 
 export function createMember(data) {
     const id = `mem-${Date.now()}-${Math.floor(Math.random() * 1000)}`
-    const newMember = { ...data, id, created_at: new Date().toISOString(), is_active: true }
+    const newMember = { ...data, id, email: (data.email || '').trim().toLowerCase(), created_at: new Date().toISOString(), is_active: true }
 
     // Auto-asignación a múltiples ministerios
     if (data.groups && Array.isArray(data.groups)) {
@@ -189,7 +189,8 @@ export function updateMember(id, data) {
     const index = MEMBERS.findIndex(m => m.id === id)
     if (index === -1) return null
 
-    const updatedMember = { ...MEMBERS[index], ...data }
+    const normalizedData = data.email != null ? { ...data, email: data.email.trim().toLowerCase() } : data
+    const updatedMember = { ...MEMBERS[index], ...normalizedData }
 
     // Resetear todas las banderas de grupos operativos
     OPERATIONAL_GROUPS.forEach(g => {
@@ -311,17 +312,21 @@ export function getUsers() { return [...USERS] }
 
 export function getUserById(id) { return USERS.find(u => u.id === id) || null }
 
-export function getUserByEmail(email) { return USERS.find(u => u.email === email) || null }
+export function getUserByEmail(email) {
+    if (!email) return null
+    return USERS.find(u => u.email && u.email.toLowerCase() === email.toLowerCase()) || null
+}
 
 function userDocRef(id) { return doc(db, 'users', id) }
 
 export function createUser(data) {
-    if (getUserByEmail(data.email)) {
+    const email = (data.email || '').trim().toLowerCase()
+    if (getUserByEmail(email)) {
         return { error: 'Ya existe un usuario con ese correo electrónico' }
     }
     const newUser = {
         id: `user-${Date.now()}`,
-        email: data.email,
+        email,
         role: data.role,
         name: data.name,
         member_id: data.member_id || null,
@@ -340,7 +345,8 @@ export function createUser(data) {
 // o crea el miembro correspondiente y se genera un usuario nuevo con rol
 // "attendee" por defecto; el administrador puede luego cambiarle el rol
 // desde la sección Usuarios.
-export function createOrGetUserForFirebaseAccount({ email, displayName, photoURL }) {
+export function createOrGetUserForFirebaseAccount({ email: rawEmail, displayName, photoURL }) {
+    const email = (rawEmail || '').trim().toLowerCase()
     const existingUser = getUserByEmail(email)
     if (existingUser) {
         if (photoURL && existingUser.photo_url !== photoURL) {

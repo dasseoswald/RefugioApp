@@ -20,6 +20,7 @@ export default function MembersPage({ canToggleActive = false }) {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingMember, setEditingMember] = useState(null)
     const [form, setForm] = useState(EMPTY_FORM)
+    const [formError, setFormError] = useState('')
     const [page, setPage] = useState(1)
     const perPage = 8
 
@@ -37,16 +38,21 @@ export default function MembersPage({ canToggleActive = false }) {
     const totalPages = Math.ceil(filtered.length / perPage)
     const paginated = filtered.slice((page - 1) * perPage, page * perPage)
 
-    const openCreate = () => { setEditingMember(null); setForm(EMPTY_FORM); setIsModalOpen(true) }
+    const openCreate = () => { setEditingMember(null); setForm(EMPTY_FORM); setFormError(''); setIsModalOpen(true) }
 
     const openEdit = (member) => {
         setEditingMember(member)
         setForm({ full_name: member.full_name, birth_date: member.birth_date, gender: member.gender, civil_status: member.civil_status, member_type: member.member_type, phone: member.phone || '', email: member.email || '', groups: member.groups || [] })
+        setFormError('')
         setIsModalOpen(true)
     }
 
     const handleSave = () => {
-        if (!form.full_name || !form.birth_date) return
+        if (!form.full_name.trim()) {
+            setFormError('El nombre completo es obligatorio')
+            return
+        }
+        setFormError('')
         if (editingMember) {
             updateMember(editingMember.id, form)
         } else {
@@ -211,7 +217,7 @@ export default function MembersPage({ canToggleActive = false }) {
                             className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] focus:bg-white transition-all text-sm" placeholder="Nombre completo" />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-[#111111] mb-1.5">Fecha de Nacimiento *</label>
+                        <label className="block text-sm font-medium text-[#111111] mb-1.5">Fecha de Nacimiento</label>
                         <input type="date" value={form.birth_date} onChange={(e) => updateField('birth_date', e.target.value)}
                             className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] focus:bg-white transition-all text-sm" />
                     </div>
@@ -267,6 +273,9 @@ export default function MembersPage({ canToggleActive = false }) {
                         </select>
                     </div>
                 </div>
+                {formError && (
+                    <div className="mt-4 bg-[#FADBD8] text-[#E74C3C] text-sm px-4 py-3 rounded-xl">{formError}</div>
+                )}
                 <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
                     <button onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 rounded-xl border-2 border-gray-200 text-[#6E6E6E] font-medium text-sm hover:bg-gray-50 transition-colors cursor-pointer">Cancelar</button>
                     <button onClick={handleSave} className="px-5 py-2.5 rounded-xl text-white font-medium text-sm transition-all hover:shadow-lg cursor-pointer" style={{ background: 'linear-gradient(135deg, #2696D2, #1D74A8)' }}>
