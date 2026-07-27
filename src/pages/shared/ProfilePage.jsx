@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { getMemberById, updateMember, getMemberProfile, updateMemberProfile } from '../../data/mockData.js'
+import { enablePushNotifications, getNotificationPermission } from '../../lib/push.js'
 import UserAvatar from '../../components/ui/UserAvatar.jsx'
 import {
     Camera, Save, CheckCircle2, AlertCircle, Mail, Shield, User, Cake, Heart, Phone, UserCheck,
-    MapPin, Briefcase, Church, Users as UsersIcon, Droplets, AlertTriangle, Calendar,
+    MapPin, Briefcase, Church, Users as UsersIcon, Droplets, AlertTriangle, Calendar, Bell, BellRing,
 } from 'lucide-react'
 
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 // 2MB
@@ -50,6 +51,8 @@ export default function ProfilePage() {
     const [savingMember, setSavingMember] = useState(false)
     const [lifeForm, setLifeForm] = useState(EMPTY_LIFE_FORM)
     const [savingLife, setSavingLife] = useState(false)
+    const [notifPermission, setNotifPermission] = useState('default')
+    const [enablingNotifs, setEnablingNotifs] = useState(false)
 
     useEffect(() => {
         if (!user?.member_id) return
@@ -77,6 +80,10 @@ export default function ProfilePage() {
             allergies: profile.allergies || '',
         })
     }, [user?.member_id])
+
+    useEffect(() => {
+        setNotifPermission(getNotificationPermission())
+    }, [])
 
     if (!user) return null
 
@@ -115,6 +122,18 @@ export default function ProfilePage() {
             }
             showToast('Hoja de vida actualizada correctamente')
         }, 300)
+    }
+
+    const handleEnableNotifications = async () => {
+        setEnablingNotifs(true)
+        const result = await enablePushNotifications(user.id)
+        setEnablingNotifs(false)
+        setNotifPermission(getNotificationPermission())
+        if (result.error) {
+            showToast(result.error, 'error')
+            return
+        }
+        showToast('¡Notificaciones activadas! Recibirás avisos de tus grupos')
     }
 
     const showToast = (message, type = 'success') => {
@@ -263,6 +282,38 @@ export default function ProfilePage() {
                             <p className="text-sm font-semibold" style={{ color: role.color }}>{role.label}</p>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            {/* Notificaciones push */}
+            <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] p-6">
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        {notifPermission === 'granted'
+                            ? <BellRing className="w-5 h-5 text-[#13CD68] flex-shrink-0" />
+                            : <Bell className="w-5 h-5 text-[#6E6E6E] flex-shrink-0" />}
+                        <div>
+                            <h3 className="text-base font-semibold text-[#111111]">Notificaciones</h3>
+                            <p className="text-xs text-[#6E6E6E] mt-0.5">
+                                {notifPermission === 'granted'
+                                    ? 'Activadas en este dispositivo'
+                                    : notifPermission === 'denied'
+                                        ? 'Bloqueadas. Actívalas en la configuración de tu navegador'
+                                        : 'Recibe avisos de tus grupos aunque no tengas la app abierta'}
+                            </p>
+                        </div>
+                    </div>
+                    {notifPermission !== 'granted' && notifPermission !== 'denied' && (
+                        <button
+                            onClick={handleEnableNotifications}
+                            disabled={enablingNotifs}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-50 cursor-pointer flex-shrink-0"
+                            style={{ background: '#2696D2' }}
+                        >
+                            <Bell className="w-4 h-4" />
+                            {enablingNotifs ? 'Activando...' : 'Activar'}
+                        </button>
+                    )}
                 </div>
             </div>
 

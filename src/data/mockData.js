@@ -5,7 +5,7 @@
  * memoria + localStorage por ahora, pendiente de migración.
  */
 import { db } from '../firebase.js'
-import { collection, doc, setDoc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore'
+import { collection, doc, setDoc, updateDoc, onSnapshot, writeBatch, arrayUnion } from 'firebase/firestore'
 
 export const OPERATIONAL_GROUPS = [
     { id: 'escuela-discipulo', name: 'Escuela del Discípulo', field: 'escuela_discipulo', icon: 'BookOpen' },
@@ -336,6 +336,19 @@ export function createUser(data) {
     const { id, ...rest } = newUser
     setDoc(userDocRef(id), rest).catch(err => console.error('No se pudo guardar el usuario', err))
     return { data: newUser }
+}
+
+// Guarda el token de notificaciones push (FCM) del dispositivo actual en el
+// usuario, para que la función en la nube pueda enviarle notificaciones.
+// Un mismo usuario puede tener varios tokens (uno por dispositivo/navegador).
+export function saveFcmToken(userId, token) {
+    const index = USERS.findIndex(u => u.id === userId)
+    if (index === -1) return
+    const existingTokens = USERS[index].fcm_tokens || []
+    if (existingTokens.includes(token)) return
+    const updated = { ...USERS[index], fcm_tokens: [...existingTokens, token] }
+    USERS = USERS.map((u, i) => (i === index ? updated : u))
+    updateDoc(userDocRef(userId), { fcm_tokens: arrayUnion(token) }).catch(err => console.error('No se pudo guardar el token de notificaciones', err))
 }
 
 // ---- Vinculación de cuentas Firebase (Google / correo-contraseña) ----
@@ -812,7 +825,7 @@ export function getMemberAttendanceLastYear(memberId) {
 
 // ============== GROUP DASHBOARD (AVISOS & CHAT) ==============
 
-const GROUP_NOTICES = [
+let GROUP_NOTICES = [
     { 
         id: 'note-1', 
         group_id: 'jovenes', 
@@ -848,12 +861,11 @@ export function broadcastNoticeToGroups(groupIds, data) {
 }
 
 export function createGroupNotice(data) {
-    const newNotice = {
-        ...data,
-        id: `notice-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        created_at: new Date().toISOString()
-    }
-    GROUP_NOTICES.push(newNotice)
+    const id = `notice-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    const newNotice = { ...data, id, created_at: new Date().toISOString() }
+    GROUP_NOTICES = [...GROUP_NOTICES, newNotice]
+    setDoc(doc(db, 'groupNotices', id), { ...data, created_at: newNotice.created_at })
+        .catch(err => console.error('No se pudo sincronizar el aviso', err))
     return newNotice
 }
 
@@ -1076,13 +1088,14 @@ const STORAGE_KEY = 'churchattend_mock_db_v1'
 // Nota: MEMBERS y USERS ya NO se guardan aquí — viven en Firestore (ver
 // más abajo "Sincronización con Firestore"), compartidos entre todos los
 // dispositivos. El resto de las "tablas" sigue en memoria + localStorage.
-// MEMBER_PROFILES ya NO se guarda aquí — vive en Firestore (ver más abajo).
+// MEMBER_PROFILES y GROUP_NOTICES ya NO se guardan aquí — viven en Firestore
+// (ver más abajo). GROUP_MESSAGES (chat) sigue pendiente de migración.
 const COLLECTIONS = {
     SERVICES, ATTENDANCES, SYSTEM_SETTINGS,
     ESCUELA_CLASSES, ESCUELA_ATTENDANCES, ESCUELA_ENROLLMENTS,
     REFUGIOS, REFUGIO_ENROLLMENTS,
     PROFILE_NOTES,
-    GROUP_NOTICES, GROUP_MESSAGES,
+    GROUP_MESSAGES,
     PRAYER_REQUESTS,
     EVENTS, EVENT_REGISTRATIONS,
 }
@@ -1141,10 +1154,11 @@ export const coreDataReadyPromise = new Promise((resolve) => { resolveCoreDataRe
 let membersFirstLoad = true
 let usersFirstLoad = true
 let profilesFirstLoad = true
+let noticesFirstLoad = true
 let coreSyncStarted = false
 
 function checkCoreDataReady() {
-    if (!membersFirstLoad && !usersFirstLoad && !profilesFirstLoad) resolveCoreDataReady()
+    if (!membersFirstLoad && !usersFirstLoad && !profilesFirstLoad && !noticesFirstLoad) resolveCoreDataReady()
 }
 
 export function startCoreDataSync() {
@@ -1212,6 +1226,27 @@ export function startCoreDataSync() {
     }, (err) => {
         console.error('Error sincronizando hojas de vida', err)
         profilesFirstLoad = false
+        checkCoreDataReady()
+    })
+
+    onSnapshot(collection(db, 'groupNotices'), async (snap) => {
+        if (snap.empty && noticesFirstLoad && GROUP_NOTICES.length > 0) {
+            try {
+                const batch = writeBatch(db)
+                GROUP_NOTICES.forEach(n => {
+                    const { id, ...rest } = n
+                    batch.set(doc(db, 'groupNotices', id), rest)
+                })
+                await batch.commit()
+            } catch (e) { console.error('No se pudieron sembrar los avisos iniciales', e) }
+            return
+        }
+        GROUP_NOTICES = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        noticesFirstLoad = false
+        checkCoreDataReady()
+    }, (err) => {
+        console.error('Error sincronizando avisos', err)
+        noticesFirstLoad = false
         checkCoreDataReady()
     })
 }
