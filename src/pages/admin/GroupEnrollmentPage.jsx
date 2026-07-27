@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getMembers, updateMember } from '../../data/mockData.js'
+import { getMembers, patchMember } from '../../data/mockData.js'
 import { Search, UserPlus, UserMinus, Users, CheckCircle2, BookOpen, Sprout } from 'lucide-react'
 
 const GROUP_CONFIG = {
@@ -44,14 +44,14 @@ export default function GroupEnrollmentPage({ groupKey }) {
     )
 
     const handleEnroll = (memberId, memberName) => {
-        updateMember(memberId, { [config.field]: true })
+        patchMember(memberId, { [config.field]: true })
         refreshMembers()
         setNotification({ type: 'success', message: `${memberName} inscrito exitosamente` })
         setTimeout(() => setNotification(null), 3000)
     }
 
     const handleRemove = (memberId, memberName) => {
-        updateMember(memberId, { [config.field]: false })
+        patchMember(memberId, { [config.field]: false })
         refreshMembers()
         setNotification({ type: 'info', message: `${memberName} removido del grupo` })
         setTimeout(() => setNotification(null), 3000)

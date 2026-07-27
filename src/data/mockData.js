@@ -155,7 +155,7 @@ function memberDocRef(id) { return doc(db, 'members', id) }
 // Aplica un cambio parcial a un miembro: actualiza la caché local al instante
 // (misma UX de siempre) y además lo graba en Firestore para que sea visible
 // para todos los demás usuarios/dispositivos.
-function patchMember(id, patch) {
+export function patchMember(id, patch) {
     const index = MEMBERS.findIndex(m => m.id === id)
     if (index === -1) return null
     const updated = { ...MEMBERS[index], ...patch }

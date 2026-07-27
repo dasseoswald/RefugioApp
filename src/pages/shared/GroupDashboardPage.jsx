@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { 
-    OPERATIONAL_GROUPS, getMembers, updateMember, 
-    getGroupNotices, createGroupNotice, 
-    getGroupMessages, sendGroupMessage 
+import {
+    OPERATIONAL_GROUPS, getMembers, patchMember,
+    getGroupNotices, createGroupNotice,
+    getGroupMessages, sendGroupMessage
 } from '../../data/mockData.js'
 import { 
     Users, Megaphone, MessageCircle, Image, Send, 
@@ -141,14 +141,14 @@ function MembersTab({ group, color, gradient, canManage }) {
     )
 
     const handleEnroll = (memberId, memberName) => {
-        updateMember(memberId, { [group.field]: true, group: group.name }) // sync standard field
+        patchMember(memberId, { [group.field]: true })
         refreshMembers()
         setNotification({ type: 'success', message: `${memberName} inscrito exitosamente` })
         setTimeout(() => setNotification(null), 3000)
     }
 
     const handleRemove = (memberId, memberName) => {
-        updateMember(memberId, { [group.field]: false, group: null })
+        patchMember(memberId, { [group.field]: false })
         refreshMembers()
         setNotification({ type: 'info', message: `${memberName} removido del grupo` })
         setTimeout(() => setNotification(null), 3000)
