@@ -735,7 +735,7 @@ export function getMemberRefugio(memberId) {
 
 // ============== HOJA DE VIDA (MEMBER PROFILES) ==============
 
-const MEMBER_PROFILES = {
+let MEMBER_PROFILES = {
     '1': { member_id: '1', address: 'Av. Busch #234, Zona Central', occupation: 'Profesora', ministry: 'Alabanza', baptized: true, baptism_date: '2010-05-20', family_info: 'Esposo: Juan García, Hijos: Pablo (12), Sofía (8)', emergency_contact: 'Juan García', emergency_phone: '+591 789-4321', blood_type: 'O+', allergies: 'Ninguna' },
     '2': { member_id: '2', address: 'Calle Litoral #78, Zona Sur', occupation: 'Ingeniero de Sistemas', ministry: 'Multimedia', baptized: true, baptism_date: '2015-11-10', family_info: 'Soltero', emergency_contact: 'Rosa Ruiz', emergency_phone: '+591 789-8765', blood_type: 'A+', allergies: 'Penicilina' },
     '3': { member_id: '3', address: 'Av. 6 de Agosto #456', occupation: 'Contadora', ministry: 'Liderazgo', baptized: true, baptism_date: '2005-03-15', family_info: 'Esposo: Marcos Torrez, Hija: Camila (15)', emergency_contact: 'Marcos Torrez', emergency_phone: '+591 789-1111', blood_type: 'B+', allergies: 'Ninguna' },
@@ -748,16 +748,17 @@ const PROFILE_NOTES = [
     { id: 'note-4', member_id: '3', author: 'Lucía Ramírez', content: 'Líder de célula Esperanza. Reuniones semanales los miércoles.', created_at: '2025-11-05T16:45:00' },
 ]
 
+const EMPTY_PROFILE = { address: '', occupation: '', ministry: '', baptized: false, baptism_date: '', family_info: '', emergency_contact: '', emergency_phone: '', blood_type: '', allergies: '' }
+
 export function getMemberProfile(memberId) {
-    return MEMBER_PROFILES[memberId] || { member_id: memberId, address: '', occupation: '', ministry: '', baptized: false, baptism_date: '', family_info: '', emergency_contact: '', emergency_phone: '', blood_type: '', allergies: '' }
+    return MEMBER_PROFILES[memberId] ? { ...MEMBER_PROFILES[memberId] } : { member_id: memberId, ...EMPTY_PROFILE }
 }
 
 export function updateMemberProfile(memberId, data) {
-    if (!MEMBER_PROFILES[memberId]) {
-        MEMBER_PROFILES[memberId] = { member_id: memberId, address: '', occupation: '', ministry: '', baptized: false, baptism_date: '', family_info: '', emergency_contact: '', emergency_phone: '', blood_type: '', allergies: '' }
-    }
-    MEMBER_PROFILES[memberId] = { ...MEMBER_PROFILES[memberId], ...data }
-    return { ...MEMBER_PROFILES[memberId] }
+    const updated = { ...(MEMBER_PROFILES[memberId] || { member_id: memberId, ...EMPTY_PROFILE }), ...data }
+    MEMBER_PROFILES = { ...MEMBER_PROFILES, [memberId]: updated }
+    setDoc(doc(db, 'memberProfiles', memberId), updated).catch(err => console.error('No se pudo sincronizar la hoja de vida', err))
+    return { ...updated }
 }
 
 export function getProfileNotes(memberId) {
@@ -1075,11 +1076,12 @@ const STORAGE_KEY = 'churchattend_mock_db_v1'
 // Nota: MEMBERS y USERS ya NO se guardan aquí — viven en Firestore (ver
 // más abajo "Sincronización con Firestore"), compartidos entre todos los
 // dispositivos. El resto de las "tablas" sigue en memoria + localStorage.
+// MEMBER_PROFILES ya NO se guarda aquí — vive en Firestore (ver más abajo).
 const COLLECTIONS = {
     SERVICES, ATTENDANCES, SYSTEM_SETTINGS,
     ESCUELA_CLASSES, ESCUELA_ATTENDANCES, ESCUELA_ENROLLMENTS,
     REFUGIOS, REFUGIO_ENROLLMENTS,
-    MEMBER_PROFILES, PROFILE_NOTES,
+    PROFILE_NOTES,
     GROUP_NOTICES, GROUP_MESSAGES,
     PRAYER_REQUESTS,
     EVENTS, EVENT_REGISTRATIONS,
@@ -1138,10 +1140,11 @@ let resolveCoreDataReady
 export const coreDataReadyPromise = new Promise((resolve) => { resolveCoreDataReady = resolve })
 let membersFirstLoad = true
 let usersFirstLoad = true
+let profilesFirstLoad = true
 let coreSyncStarted = false
 
 function checkCoreDataReady() {
-    if (!membersFirstLoad && !usersFirstLoad) resolveCoreDataReady()
+    if (!membersFirstLoad && !usersFirstLoad && !profilesFirstLoad) resolveCoreDataReady()
 }
 
 export function startCoreDataSync() {
@@ -1187,6 +1190,28 @@ export function startCoreDataSync() {
     }, (err) => {
         console.error('Error sincronizando usuarios', err)
         usersFirstLoad = false
+        checkCoreDataReady()
+    })
+
+    onSnapshot(collection(db, 'memberProfiles'), async (snap) => {
+        if (snap.empty && profilesFirstLoad && Object.keys(MEMBER_PROFILES).length > 0) {
+            try {
+                const batch = writeBatch(db)
+                Object.entries(MEMBER_PROFILES).forEach(([memberId, profile]) => {
+                    batch.set(doc(db, 'memberProfiles', memberId), profile)
+                })
+                await batch.commit()
+            } catch (e) { console.error('No se pudieron sembrar las hojas de vida iniciales', e) }
+            return
+        }
+        const next = {}
+        snap.forEach(d => { next[d.id] = d.data() })
+        MEMBER_PROFILES = next
+        profilesFirstLoad = false
+        checkCoreDataReady()
+    }, (err) => {
+        console.error('Error sincronizando hojas de vida', err)
+        profilesFirstLoad = false
         checkCoreDataReady()
     })
 }

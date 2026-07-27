@@ -1,14 +1,18 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { getMemberById, updateMember } from '../../data/mockData.js'
+import { getMemberById, updateMember, getMemberProfile, updateMemberProfile } from '../../data/mockData.js'
 import UserAvatar from '../../components/ui/UserAvatar.jsx'
-import { Camera, Save, CheckCircle2, AlertCircle, Mail, Shield, User, Cake, Heart, Phone, UserCheck } from 'lucide-react'
+import {
+    Camera, Save, CheckCircle2, AlertCircle, Mail, Shield, User, Cake, Heart, Phone, UserCheck,
+    MapPin, Briefcase, Church, Users as UsersIcon, Droplets, AlertTriangle, Calendar,
+} from 'lucide-react'
 
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 // 2MB
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const GENDERS = ['M', 'F', 'Otro']
 const CIVIL_STATUSES = ['Soltero', 'Casado', 'Viudo', 'Divorciado']
 const GENDER_LABELS = { M: 'Masculino', F: 'Femenino', Otro: 'Otro' }
+const BLOOD_TYPES = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-']
 
 const roleLabels = {
     admin: { label: 'Administrador', color: '#2696D2', bg: '#E8F4FC' },
@@ -33,6 +37,7 @@ function readFileAsDataUrl(file) {
 }
 
 const EMPTY_MEMBER_FORM = { birth_date: '', gender: 'M', civil_status: 'Soltero', phone: '' }
+const EMPTY_LIFE_FORM = { address: '', occupation: '', ministry: '', baptized: false, baptism_date: '', family_info: '', emergency_contact: '', emergency_phone: '', blood_type: '', allergies: '' }
 
 export default function ProfilePage() {
     const { user, updateProfile } = useAuth()
@@ -43,6 +48,8 @@ export default function ProfilePage() {
     const [member, setMember] = useState(null)
     const [memberForm, setMemberForm] = useState(EMPTY_MEMBER_FORM)
     const [savingMember, setSavingMember] = useState(false)
+    const [lifeForm, setLifeForm] = useState(EMPTY_LIFE_FORM)
+    const [savingLife, setSavingLife] = useState(false)
 
     useEffect(() => {
         if (!user?.member_id) return
@@ -56,6 +63,19 @@ export default function ProfilePage() {
                 phone: m.phone || '',
             })
         }
+        const profile = getMemberProfile(user.member_id)
+        setLifeForm({
+            address: profile.address || '',
+            occupation: profile.occupation || '',
+            ministry: profile.ministry || '',
+            baptized: !!profile.baptized,
+            baptism_date: profile.baptism_date || '',
+            family_info: profile.family_info || '',
+            emergency_contact: profile.emergency_contact || '',
+            emergency_phone: profile.emergency_phone || '',
+            blood_type: profile.blood_type || '',
+            allergies: profile.allergies || '',
+        })
     }, [user?.member_id])
 
     if (!user) return null
@@ -78,6 +98,22 @@ export default function ProfilePage() {
             }
             setMember(updated)
             showToast('Información personal actualizada correctamente')
+        }, 300)
+    }
+
+    const updateLifeField = (field, value) => setLifeForm(prev => ({ ...prev, [field]: value }))
+
+    const handleSaveLifeInfo = () => {
+        if (!user.member_id) return
+        setSavingLife(true)
+        setTimeout(() => {
+            const updated = updateMemberProfile(user.member_id, lifeForm)
+            setSavingLife(false)
+            if (!updated) {
+                showToast('No se pudo actualizar tu hoja de vida', 'error')
+                return
+            }
+            showToast('Hoja de vida actualizada correctamente')
         }, 300)
     }
 
@@ -285,6 +321,89 @@ export default function ProfilePage() {
                         >
                             <Save className="w-4 h-4" />
                             {savingMember ? 'Guardando...' : 'Guardar Información Personal'}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Hoja de Vida */}
+            {member && (
+                <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] p-6 space-y-4">
+                    <div>
+                        <h3 className="text-base font-semibold text-[#111111]">Hoja de Vida</h3>
+                        <p className="text-xs text-[#6E6E6E] mt-0.5">Información adicional para tu ficha de miembro</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-[#111111] mb-1.5 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Dirección</label>
+                            <input type="text" value={lifeForm.address} onChange={(e) => updateLifeField('address', e.target.value)}
+                                className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] focus:bg-white transition-all text-sm" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-[#111111] mb-1.5 flex items-center gap-1.5"><Briefcase className="w-3.5 h-3.5" /> Ocupación</label>
+                            <input type="text" value={lifeForm.occupation} onChange={(e) => updateLifeField('occupation', e.target.value)}
+                                className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] focus:bg-white transition-all text-sm" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-[#111111] mb-1.5 flex items-center gap-1.5"><Church className="w-3.5 h-3.5" /> Ministerio</label>
+                            <input type="text" value={lifeForm.ministry} onChange={(e) => updateLifeField('ministry', e.target.value)}
+                                className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] focus:bg-white transition-all text-sm" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-[#111111] mb-1.5 flex items-center gap-1.5"><Droplets className="w-3.5 h-3.5" /> Tipo de Sangre</label>
+                            <select value={lifeForm.blood_type} onChange={(e) => updateLifeField('blood_type', e.target.value)}
+                                className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] text-sm cursor-pointer">
+                                <option value="">Sin especificar</option>
+                                {BLOOD_TYPES.map(bt => <option key={bt} value={bt}>{bt}</option>)}
+                            </select>
+                        </div>
+                        <div className="sm:col-span-2">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" checked={lifeForm.baptized}
+                                    onChange={(e) => updateLifeField('baptized', e.target.checked)}
+                                    className="w-4 h-4 rounded accent-[#2696D2] cursor-pointer" />
+                                <span className="text-sm font-medium text-[#111111] flex items-center gap-1.5"><Church className="w-3.5 h-3.5" /> Bautizado</span>
+                            </label>
+                        </div>
+                        {lifeForm.baptized && (
+                            <div>
+                                <label className="block text-sm font-medium text-[#111111] mb-1.5 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Fecha de Bautismo</label>
+                                <input type="date" value={lifeForm.baptism_date} onChange={(e) => updateLifeField('baptism_date', e.target.value)}
+                                    className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] focus:bg-white transition-all text-sm" />
+                            </div>
+                        )}
+                        <div>
+                            <label className="block text-sm font-medium text-[#111111] mb-1.5 flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Contacto de Emergencia</label>
+                            <input type="text" value={lifeForm.emergency_contact} onChange={(e) => updateLifeField('emergency_contact', e.target.value)}
+                                placeholder="Nombre" className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] focus:bg-white transition-all text-sm" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-[#111111] mb-1.5 flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Teléfono de Emergencia</label>
+                            <input type="tel" value={lifeForm.emergency_phone} onChange={(e) => updateLifeField('emergency_phone', e.target.value)}
+                                placeholder="+591 7XX-XXXX" className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] focus:bg-white transition-all text-sm" />
+                        </div>
+                        <div className="sm:col-span-2">
+                            <label className="block text-sm font-medium text-[#111111] mb-1.5 flex items-center gap-1.5"><UsersIcon className="w-3.5 h-3.5" /> Información Familiar</label>
+                            <textarea value={lifeForm.family_info} onChange={(e) => updateLifeField('family_info', e.target.value)} rows={2}
+                                placeholder="Ej: Esposo/a, hijos..." className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] focus:bg-white transition-all text-sm resize-none" />
+                        </div>
+                        <div className="sm:col-span-2">
+                            <label className="block text-sm font-medium text-[#111111] mb-1.5 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Alergias</label>
+                            <input type="text" value={lifeForm.allergies} onChange={(e) => updateLifeField('allergies', e.target.value)}
+                                placeholder="Ej: Ninguna" className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] focus:bg-white transition-all text-sm" />
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end pt-2 border-t border-gray-100">
+                        <button
+                            onClick={handleSaveLifeInfo}
+                            disabled={savingLife}
+                            className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-white font-medium text-sm transition-all hover:shadow-lg cursor-pointer disabled:opacity-60 mt-4"
+                            style={{ background: 'linear-gradient(135deg, #2696D2, #1D74A8)' }}
+                        >
+                            <Save className="w-4 h-4" />
+                            {savingLife ? 'Guardando...' : 'Guardar Hoja de Vida'}
                         </button>
                     </div>
                 </div>
