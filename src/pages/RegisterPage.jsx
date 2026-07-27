@@ -1,0 +1,242 @@
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext.jsx'
+import { User, Mail, Lock, ArrowRight, Eye, EyeOff, CheckCircle2 } from 'lucide-react'
+import logo from '../assets/logo.png'
+
+function GoogleIcon() {
+    return (
+        <svg width="18" height="18" viewBox="0 0 48 48">
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+        </svg>
+    )
+}
+
+export default function RegisterPage() {
+    const { register, loginWithGoogle } = useAuth()
+
+    const [name, setName] = useState('')
+    const [email, setEmail] = useState('')
+    const [password, setPassword] = useState('')
+    const [confirm, setConfirm] = useState('')
+    const [showPassword, setShowPassword] = useState(false)
+    const [error, setError] = useState('')
+    const [isLoading, setIsLoading] = useState(false)
+    const [done, setDone] = useState(false)
+
+    const handleSubmit = async (event) => {
+        event.preventDefault()
+        setError('')
+
+        if (password.length < 6) { setError('La contraseña debe tener al menos 6 caracteres.'); return }
+        if (password !== confirm) { setError('Las contraseñas no coinciden.'); return }
+
+        setIsLoading(true)
+        const result = await register(name.trim(), email.trim(), password)
+        setIsLoading(false)
+
+        if (result.error) {
+            setError(result.error)
+            return
+        }
+        setDone(true)
+    }
+
+    const handleGoogle = async () => {
+        setError('')
+        setIsLoading(true)
+        const result = await loginWithGoogle()
+        setIsLoading(false)
+        if (result.error) {
+            setError(result.error)
+        }
+    }
+
+    if (done) {
+        return (
+            <div className="min-h-screen flex items-center justify-center p-6" style={{ background: 'linear-gradient(135deg, #010101 0%, #111111 40%, #2696D2 100%)' }}>
+                <div className="bg-white rounded-3xl shadow-2xl p-10 text-center animate-scale-in max-w-sm w-full">
+                    <CheckCircle2 className="w-14 h-14 mx-auto mb-4 text-[#13CD68]" />
+                    <p className="text-lg font-bold text-[#111111]">¡Cuenta creada!</p>
+                    <p className="text-sm text-[#6E6E6E] mt-1">Ya puedes iniciar sesión con tu correo y contraseña.</p>
+                    <Link to="/login"
+                        className="mt-6 inline-flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white font-semibold text-sm transition-all hover:shadow-lg"
+                        style={{ background: 'linear-gradient(135deg, #2696D2, #1D74A8)' }}>
+                        Ir a Iniciar Sesión <ArrowRight className="w-4 h-4" />
+                    </Link>
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <div className="min-h-screen flex" style={{ background: 'linear-gradient(135deg, #010101 0%, #111111 40%, #2696D2 100%)' }}>
+            {/* Left - Branding */}
+            <div className="hidden lg:flex flex-1 flex-col justify-center items-center p-12 text-white">
+                <div className="max-w-md text-center">
+                    <div className="w-20 h-20 mx-auto mb-8 rounded-2xl flex items-center justify-center bg-white/10 backdrop-blur-sm border border-white/20">
+                        <img src={logo} alt="ChurchAttend" className="w-14 h-14 object-contain" />
+                    </div>
+                    <h1 className="text-5xl font-bold mb-4 leading-tight">
+                        Church<span className="text-[#E8A838]">Attend</span>
+                    </h1>
+                    <p className="text-xl text-white/70 mb-6">Únete a la comunidad y lleva el control de tu asistencia</p>
+                    <div className="flex items-center justify-center gap-2 text-white/40 text-sm">
+                        <div className="w-2 h-2 rounded-full bg-[#13CD68]"></div>
+                        <span>Rápido • Gratis • Sin complicaciones</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Right - Register form */}
+            <div className="flex-1 flex items-center justify-center p-6">
+                <div className="w-full max-w-md">
+                    <div className="bg-white rounded-3xl shadow-2xl p-8 animate-scale-in">
+                        {/* Mobile logo */}
+                        <div className="lg:hidden text-center mb-8">
+                            <div className="w-14 h-14 mx-auto mb-3 rounded-xl flex items-center justify-center"
+                                style={{ background: 'linear-gradient(135deg, #2696D2, #1D74A8)' }}>
+                                <img src={logo} alt="ChurchAttend" className="w-10 h-10 object-contain" />
+                            </div>
+                            <h1 className="text-2xl font-bold text-[#111111]">
+                                Church<span className="text-[#E8A838]">Attend</span>
+                            </h1>
+                        </div>
+
+                        <h2 className="text-2xl font-bold text-[#111111] mb-1">Crear cuenta</h2>
+                        <p className="text-[#6E6E6E] text-sm mb-8">Rápido y sin complicaciones</p>
+
+                        <form onSubmit={handleSubmit} className="space-y-5">
+                            {/* Nombre */}
+                            <div>
+                                <label className="block text-sm font-medium text-[#111111] mb-2">Nombre completo</label>
+                                <div className="relative">
+                                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#6E6E6E]" />
+                                    <input
+                                        type="text"
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
+                                        placeholder="Juan Pérez"
+                                        required
+                                        className="w-full pl-12 pr-4 py-3.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 text-[#111111] placeholder:text-[#6E6E6E]/50 focus:outline-none focus:border-[#2696D2] focus:bg-white transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Email */}
+                            <div>
+                                <label className="block text-sm font-medium text-[#111111] mb-2">Correo Electrónico</label>
+                                <div className="relative">
+                                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#6E6E6E]" />
+                                    <input
+                                        type="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        placeholder="correo@ejemplo.com"
+                                        required
+                                        className="w-full pl-12 pr-4 py-3.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 text-[#111111] placeholder:text-[#6E6E6E]/50 focus:outline-none focus:border-[#2696D2] focus:bg-white transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Password */}
+                            <div>
+                                <label className="block text-sm font-medium text-[#111111] mb-2">Contraseña</label>
+                                <div className="relative">
+                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#6E6E6E]" />
+                                    <input
+                                        type={showPassword ? 'text' : 'password'}
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        placeholder="Mínimo 6 caracteres"
+                                        required
+                                        className="w-full pl-12 pr-12 py-3.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 text-[#111111] placeholder:text-[#6E6E6E]/50 focus:outline-none focus:border-[#2696D2] focus:bg-white transition-all"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[#6E6E6E] hover:text-[#111111] cursor-pointer"
+                                    >
+                                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Confirm password */}
+                            <div>
+                                <label className="block text-sm font-medium text-[#111111] mb-2">Confirmar contraseña</label>
+                                <div className="relative">
+                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#6E6E6E]" />
+                                    <input
+                                        type={showPassword ? 'text' : 'password'}
+                                        value={confirm}
+                                        onChange={(e) => setConfirm(e.target.value)}
+                                        placeholder="Repite tu contraseña"
+                                        required
+                                        className={`w-full pl-12 pr-4 py-3.5 rounded-xl border-2 bg-gray-50/50 text-[#111111] placeholder:text-[#6E6E6E]/50 focus:outline-none focus:bg-white transition-all ${confirm && confirm !== password ? 'border-[#FADBD8] focus:border-[#E74C3C]' : 'border-gray-100 focus:border-[#2696D2]'
+                                            }`}
+                                    />
+                                </div>
+                                {confirm && confirm !== password && (
+                                    <p className="text-[#E74C3C] text-xs mt-1.5">Las contraseñas no coinciden</p>
+                                )}
+                            </div>
+
+                            {/* Error */}
+                            {error && (
+                                <div className="bg-[#FADBD8] text-[#E74C3C] text-sm px-4 py-3 rounded-xl animate-fade-in">
+                                    {error}
+                                </div>
+                            )}
+
+                            {/* Submit */}
+                            <button
+                                type="submit"
+                                disabled={isLoading}
+                                className="w-full py-3.5 rounded-xl text-white font-semibold text-base flex items-center justify-center gap-2 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer"
+                                style={{ background: 'linear-gradient(135deg, #2696D2, #1D74A8)' }}
+                            >
+                                {isLoading ? (
+                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                ) : (
+                                    <>
+                                        Crear Cuenta
+                                        <ArrowRight className="w-5 h-5" />
+                                    </>
+                                )}
+                            </button>
+                        </form>
+
+                        {/* Divider */}
+                        <div className="flex items-center gap-3 my-6">
+                            <div className="flex-1 h-px bg-gray-100" />
+                            <span className="text-xs text-[#6E6E6E]">o regístrate con</span>
+                            <div className="flex-1 h-px bg-gray-100" />
+                        </div>
+
+                        {/* Google */}
+                        <button
+                            type="button"
+                            onClick={handleGoogle}
+                            disabled={isLoading}
+                            className="w-full flex items-center justify-center gap-2.5 px-4 py-3 bg-white hover:bg-gray-50 text-[#111111] font-semibold rounded-xl border-2 border-gray-100 transition-all text-sm disabled:opacity-50 cursor-pointer"
+                        >
+                            <GoogleIcon />
+                            Continuar con Google
+                        </button>
+
+                        <p className="mt-6 text-center text-sm text-[#6E6E6E]">
+                            ¿Ya tienes cuenta?{' '}
+                            <Link to="/login" className="text-[#2696D2] hover:underline font-medium">
+                                Iniciar sesión
+                            </Link>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}

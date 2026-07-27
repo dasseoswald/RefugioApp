@@ -1,0 +1,153 @@
+@import "tailwindcss";
+
+@theme {
+  /* === Color Tokens — Modern Palette (Outfit + Black/Green/Blue/Gray) === */
+  --color-primary: #2696D2;
+  --color-primary-light: #5CB0E0;
+  --color-primary-dark: #1D74A8;
+  --color-secondary: #13CD68;
+  --color-secondary-light: #4FE08E;
+  --color-secondary-dark: #0FA855;
+  --color-accent: #E8A838;
+  --color-accent-light: #F0C060;
+  --color-bg-main: #EDEDED;
+  --color-bg-card: #E8F4FC;
+  --color-bg-sidebar: #010101;
+  --color-text-primary: #111111;
+  --color-text-secondary: #6E6E6E;
+  --color-error: #E74C3C;
+  --color-error-light: #FADBD8;
+  --color-success: #13CD68;
+  --color-success-light: #E1F9EC;
+  --color-warning: #E8A838;
+  --color-warning-light: #FFF3CD;
+
+  /* === Typography === */
+  --font-family-base: 'Outfit', system-ui, -apple-system, sans-serif;
+
+  /* === Shadows === */
+  --shadow-card: 0 2px 12px rgba(38,150,210, 0.08);
+  --shadow-card-hover: 0 8px 24px rgba(38,150,210, 0.15);
+  --shadow-modal: 0 20px 60px rgba(0, 0, 0, 0.2);
+
+  /* === Border Radius === */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-full: 9999px;
+}
+
+/* === Base Styles === */
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+}
+
+body {
+  font-family: var(--font-family-base);
+  background-color: var(--color-bg-main);
+  color: var(--color-text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* === Scrollbar Styling === */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-primary-light);
+  border-radius: var(--radius-full);
+}
+
+/* === Animations === */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes checkmark {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.3s ease-out forwards;
+}
+
+.animate-checkmark {
+  animation: checkmark 0.5s ease-out forwards;
+}
+
+.animate-pulse-slow {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* === Stagger Children Animation === */
+.stagger-children > * {
+  opacity: 0;
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger-children > *:nth-child(2) { animation-delay: 0.1s; }
+.stagger-children > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger-children > *:nth-child(4) { animation-delay: 0.2s; }
+.stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
+.stagger-children > *:nth-child(6) { animation-delay: 0.3s; }
+
+/* === Glassmorphism === */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* === Gradient backgrounds === */
+.gradient-primary {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+}
+
+.gradient-hero {
+  background: linear-gradient(135deg, #010101 0%, var(--color-primary) 50%, var(--color-primary-light) 100%);
+}
