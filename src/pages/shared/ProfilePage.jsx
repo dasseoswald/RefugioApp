@@ -1,10 +1,14 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
+import { getMemberById, updateMember } from '../../data/mockData.js'
 import UserAvatar from '../../components/ui/UserAvatar.jsx'
-import { Camera, Save, CheckCircle2, AlertCircle, Mail, Shield, User } from 'lucide-react'
+import { Camera, Save, CheckCircle2, AlertCircle, Mail, Shield, User, Cake, Heart, Phone, UserCheck } from 'lucide-react'
 
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 // 2MB
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+const GENDERS = ['M', 'F', 'Otro']
+const CIVIL_STATUSES = ['Soltero', 'Casado', 'Viudo', 'Divorciado']
+const GENDER_LABELS = { M: 'Masculino', F: 'Femenino', Otro: 'Otro' }
 
 const roleLabels = {
     admin: { label: 'Administrador', color: '#2696D2', bg: '#E8F4FC' },
@@ -28,18 +32,54 @@ function readFileAsDataUrl(file) {
     })
 }
 
+const EMPTY_MEMBER_FORM = { birth_date: '', gender: 'M', civil_status: 'Soltero', phone: '' }
+
 export default function ProfilePage() {
     const { user, updateProfile } = useAuth()
     const fileInputRef = useRef(null)
     const [previewUrl, setPreviewUrl] = useState(null)
     const [saving, setSaving] = useState(false)
     const [toast, setToast] = useState(null)
+    const [member, setMember] = useState(null)
+    const [memberForm, setMemberForm] = useState(EMPTY_MEMBER_FORM)
+    const [savingMember, setSavingMember] = useState(false)
+
+    useEffect(() => {
+        if (!user?.member_id) return
+        const m = getMemberById(user.member_id)
+        setMember(m)
+        if (m) {
+            setMemberForm({
+                birth_date: m.birth_date || '',
+                gender: m.gender || 'M',
+                civil_status: m.civil_status || 'Soltero',
+                phone: m.phone || '',
+            })
+        }
+    }, [user?.member_id])
 
     if (!user) return null
 
     const role = roleLabels[user.role]
     const displayPhotoUrl = previewUrl || user.photo_url
     const hasUnsavedChanges = previewUrl !== null
+
+    const updateMemberField = (field, value) => setMemberForm(prev => ({ ...prev, [field]: value }))
+
+    const handleSaveMemberInfo = () => {
+        if (!user.member_id) return
+        setSavingMember(true)
+        setTimeout(() => {
+            const updated = updateMember(user.member_id, memberForm)
+            setSavingMember(false)
+            if (!updated) {
+                showToast('No se pudo actualizar tu información', 'error')
+                return
+            }
+            setMember(updated)
+            showToast('Información personal actualizada correctamente')
+        }, 300)
+    }
 
     const showToast = (message, type = 'success') => {
         setToast({ message, type })
@@ -189,6 +229,66 @@ export default function ProfilePage() {
                     </div>
                 </div>
             </div>
+
+            {/* Información personal del miembro */}
+            {member && (
+                <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] p-6 space-y-4">
+                    <div>
+                        <h3 className="text-base font-semibold text-[#111111]">Información Personal</h3>
+                        <p className="text-xs text-[#6E6E6E] mt-0.5">Completa estos datos para tu ficha de miembro</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-[#111111] mb-1.5 flex items-center gap-1.5"><Cake className="w-3.5 h-3.5" /> Fecha de Nacimiento</label>
+                            <input type="date" value={memberForm.birth_date} onChange={(e) => updateMemberField('birth_date', e.target.value)}
+                                className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] focus:bg-white transition-all text-sm" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-[#111111] mb-1.5 flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> Género</label>
+                            <select value={memberForm.gender} onChange={(e) => updateMemberField('gender', e.target.value)}
+                                className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] text-sm cursor-pointer">
+                                {GENDERS.map(g => <option key={g} value={g}>{GENDER_LABELS[g]}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-[#111111] mb-1.5 flex items-center gap-1.5"><Heart className="w-3.5 h-3.5" /> Estado Civil</label>
+                            <select value={memberForm.civil_status} onChange={(e) => updateMemberField('civil_status', e.target.value)}
+                                className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] text-sm cursor-pointer">
+                                {CIVIL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-[#111111] mb-1.5 flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Teléfono</label>
+                            <input type="tel" value={memberForm.phone} onChange={(e) => updateMemberField('phone', e.target.value)}
+                                placeholder="+591 7XX-XXXX" className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] focus:bg-white transition-all text-sm" />
+                        </div>
+                    </div>
+
+                    {/* Datos administrados por la iglesia (solo lectura) */}
+                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
+                        <span className="text-xs text-[#6E6E6E] flex items-center gap-1.5">
+                            <UserCheck className="w-3.5 h-3.5" /> {member.member_type || 'Miembro'}
+                        </span>
+                        {(member.groups || []).length > 0 && (
+                            <span className="text-xs text-[#6E6E6E]">· {member.groups.join(', ')}</span>
+                        )}
+                        <span className="text-xs text-[#6E6E6E]/70">(asignado por la iglesia)</span>
+                    </div>
+
+                    <div className="flex justify-end pt-2">
+                        <button
+                            onClick={handleSaveMemberInfo}
+                            disabled={savingMember}
+                            className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-white font-medium text-sm transition-all hover:shadow-lg cursor-pointer disabled:opacity-60"
+                            style={{ background: 'linear-gradient(135deg, #2696D2, #1D74A8)' }}
+                        >
+                            <Save className="w-4 h-4" />
+                            {savingMember ? 'Guardando...' : 'Guardar Información Personal'}
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Save button (visible when there's a preview) */}
             {hasUnsavedChanges && (
