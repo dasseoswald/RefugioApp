@@ -358,29 +358,41 @@ export function isUserOnline(user) {
     return Date.now() - new Date(user.last_seen).getTime() < ONLINE_THRESHOLD_MS
 }
 
-// ---- Chat en vivo (general, en tiempo real vía Firestore) ----
+// ---- Chats en vivo (en tiempo real vía Firestore) ----
 // A diferencia del chat por grupo (que aún vive en localStorage con polling),
-// este se sincroniza directo con Firestore para que los mensajes lleguen de
-// inmediato a todos los conectados, sin refrescar.
-export function listenToGeneralMessages(callback) {
-    const q = query(collection(db, 'generalMessages'), orderBy('created_at', 'asc'), limit(200))
-    return onSnapshot(q, (snap) => {
-        callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    }, (err) => console.error('Error sincronizando el chat en vivo', err))
+// estos se sincronizan directo con Firestore para que los mensajes lleguen
+// de inmediato a todos los conectados, sin refrescar. Cada canal es una
+// colección de Firestore independiente (mismo esquema de mensaje).
+function createChatChannel(collectionName) {
+    return {
+        listen(callback) {
+            const q = query(collection(db, collectionName), orderBy('created_at', 'asc'), limit(200))
+            return onSnapshot(q, (snap) => {
+                callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+            }, (err) => console.error(`Error sincronizando el chat (${collectionName})`, err))
+        },
+        send({ content, sender_id, sender_name, sender_photo, media_url, media_type }) {
+            const messagesRef = collection(db, collectionName)
+            setDoc(doc(messagesRef), {
+                content: content || '',
+                sender_id,
+                sender_name,
+                sender_photo: sender_photo || null,
+                media_url: media_url || null,
+                media_type: media_type || null,
+                created_at: new Date().toISOString(),
+            }).catch(err => console.error(`No se pudo enviar el mensaje (${collectionName})`, err))
+        },
+    }
 }
 
-export function sendGeneralMessage({ content, sender_id, sender_name, sender_photo, media_url, media_type }) {
-    const messagesRef = collection(db, 'generalMessages')
-    setDoc(doc(messagesRef), {
-        content: content || '',
-        sender_id,
-        sender_name,
-        sender_photo: sender_photo || null,
-        media_url: media_url || null,
-        media_type: media_type || null,
-        created_at: new Date().toISOString(),
-    }).catch(err => console.error('No se pudo enviar el mensaje', err))
-}
+const generalChat = createChatChannel('generalMessages')
+export const listenToGeneralMessages = generalChat.listen
+export const sendGeneralMessage = generalChat.send
+
+const radioChat = createChatChannel('radioMessages')
+export const listenToRadioMessages = radioChat.listen
+export const sendRadioMessage = radioChat.send
 
 // Guarda el token de notificaciones push (FCM) del dispositivo actual en el
 // usuario, para que la función en la nube pueda enviarle notificaciones.

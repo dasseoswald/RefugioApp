@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Radio, Play, Pause, Volume2, VolumeX } from 'lucide-react'
+import { listenToRadioMessages, sendRadioMessage } from '../../data/mockData.js'
+import ChatBox from '../../components/shared/ChatBox.jsx'
 
 const STREAM_URL = 'https://comunikadostreaming.us:10948/;'
 const NOW_PLAYING_URL = 'https://comunikadostreaming.us:10948/currentsong?sid=1'
@@ -109,6 +111,16 @@ export default function RadioPage() {
             </div>
 
             <audio ref={audioRef} preload="none" />
+
+            <div>
+                <h2 className="text-lg font-semibold text-[#111111] mb-3">Chat de la Radio</h2>
+                <ChatBox
+                    listenFn={listenToRadioMessages}
+                    sendFn={sendRadioMessage}
+                    heightClass="h-[420px]"
+                    emptyMessage="Comenta mientras escuchas la radio"
+                />
+            </div>
         </div>
     )
 }
