@@ -20,6 +20,7 @@ import BroadcastPage from './pages/admin/BroadcastPage.jsx'
 import PrayerRequestsPage from './pages/shared/PrayerRequestsPage.jsx'
 import EventsPage from './pages/shared/EventsPage.jsx'
 import LiveChatPage from './pages/shared/LiveChatPage.jsx'
+import RadioPage from './pages/shared/RadioPage.jsx'
 import { OPERATIONAL_GROUPS } from './data/mockData.js'
 
 function AppLayout({ children }) {
@@ -169,6 +170,11 @@ export default function App() {
             <Route path="/:role/chat" element={
                 <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee']}>
                     <AppLayout><LiveChatPage /></AppLayout>
+                </ProtectedRoute>
+            } />
+            <Route path="/:role/radio" element={
+                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee']}>
+                    <AppLayout><RadioPage /></AppLayout>
                 </ProtectedRoute>
             } />
 
