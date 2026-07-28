@@ -1,6 +1,6 @@
 {
     "name": "functions",
-    "description": "Funciones en la nube de ChurchAttend (notificaciones push)",
+    "description": "Funciones en la nube de Refugio App (notificaciones push)",
     "engines": {
         "node": "20"
     },

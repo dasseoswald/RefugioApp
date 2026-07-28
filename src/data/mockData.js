@@ -1,5 +1,5 @@
 /**
- * Data layer for ChurchAttend.
+ * Data layer for Refugio App.
  * Miembros y Usuarios se sincronizan con Cloud Firestore (compartidos entre
  * todos los dispositivos/usuarios). El resto de las "tablas" sigue en
  * memoria + localStorage por ahora, pendiente de migración.

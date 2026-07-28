@@ -72,8 +72,8 @@ export default function Sidebar() {
             <div className="lg:hidden fixed top-0 left-0 right-0 h-14 z-40 flex items-center justify-between px-4"
                 style={{ background: 'linear-gradient(180deg, #010101 0%, #111111 100%)' }}>
                 <div className="flex items-center gap-2">
-                    <img src={logo} alt="ChurchAttend" className="w-7 h-7 object-contain" />
-                    <span className="text-white font-bold text-base">ChurchAttend</span>
+                    <img src={logo} alt="Refugio App" className="w-7 h-7 object-contain" />
+                    <span className="text-white font-bold text-base">Refugio App</span>
                 </div>
                 <button onClick={() => setMobileOpen(true)} className="text-white p-2 -mr-2 cursor-pointer" aria-label="Abrir menú">
                     <Menu className="w-6 h-6" />
@@ -93,10 +93,10 @@ export default function Sidebar() {
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center"
                         style={{ background: 'linear-gradient(135deg, #2696D2, #5CB0E0)' }}>
-                        <img src={logo} alt="ChurchAttend" className="w-7 h-7 object-contain" />
+                        <img src={logo} alt="Refugio App" className="w-7 h-7 object-contain" />
                     </div>
                     <div>
-                        <h1 className="text-white font-bold text-lg leading-tight">ChurchAttend</h1>
+                        <h1 className="text-white font-bold text-lg leading-tight">Refugio App</h1>
                         <p className="text-white/50 text-xs">Control de Asistencia</p>
                     </div>
                 </div>

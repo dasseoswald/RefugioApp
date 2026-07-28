@@ -107,7 +107,7 @@ export default function ReportsPage() {
 
     const exportToExcel = () => {
         const wsData = [
-            ['Reporte de Asistencia - ChurchAttend'],
+            ['Reporte de Asistencia - Refugio App'],
             [`Servicio: ${selectedService?.name}`, `Fecha: ${formatDate(selectedService?.service_date || '')}`],
             [],
             ['#', 'Nombre', 'Tipo de Miembro', 'Ministerio', 'Hora de Ingreso', 'Método', 'Tipo Asistencia'],

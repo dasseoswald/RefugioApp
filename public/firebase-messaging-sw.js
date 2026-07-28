@@ -14,7 +14,7 @@ const messaging = firebase.messaging()
 
 messaging.onBackgroundMessage((payload) => {
     const { title, body } = payload.notification || {}
-    self.registration.showNotification(title || 'ChurchAttend', {
+    self.registration.showNotification(title || 'Refugio App', {
         body: body || '',
         icon: '/icon-192.png',
         badge: '/icon-192.png',

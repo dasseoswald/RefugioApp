@@ -24,7 +24,7 @@ export default function SettingsPage() {
         <div className="space-y-6 max-w-2xl">
             <div>
                 <h1 className="text-2xl font-bold text-[#111111]">Configuración del Sistema</h1>
-                <p className="text-[#6E6E6E] mt-1">Parámetros generales de ChurchAttend</p>
+                <p className="text-[#6E6E6E] mt-1">Parámetros generales de Refugio App</p>
             </div>
 
             {saved && (
