@@ -9,7 +9,7 @@ import {
     CalendarDays, LogOut, Shield,
     UserCheck, BookOpen, Sprout, ChevronDown, ChevronRight,
     UserCircle, UserSquare, Baby, Music, Layers, Megaphone, HandHeart, PartyPopper,
-    Menu, X
+    Menu, X, MessageCircle
 } from 'lucide-react'
 
 const NAV_CONFIG = {
@@ -21,6 +21,7 @@ const NAV_CONFIG = {
         { to: '/admin/mensajes', icon: Megaphone, label: 'Mensajes' },
         { to: '/admin/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
         { to: '/admin/eventos', icon: PartyPopper, label: 'Eventos' },
+        { to: '/admin/chat', icon: MessageCircle, label: 'Chat en Vivo' },
     ],
     controller: [
         { to: '/controller', icon: Home, label: 'Dashboard', end: true },
@@ -29,11 +30,13 @@ const NAV_CONFIG = {
         { to: '/controller/reports', icon: BarChart3, label: 'Reportes' },
         { to: '/controller/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
         { to: '/controller/eventos', icon: PartyPopper, label: 'Eventos' },
+        { to: '/controller/chat', icon: MessageCircle, label: 'Chat en Vivo' },
     ],
     attendee: [
         { to: '/attendee', icon: Home, label: 'Mi Asistencia', end: true },
         { to: '/attendee/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
         { to: '/attendee/eventos', icon: PartyPopper, label: 'Eventos' },
+        { to: '/attendee/chat', icon: MessageCircle, label: 'Chat en Vivo' },
     ],
 }
 

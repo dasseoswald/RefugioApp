@@ -5,7 +5,7 @@
  * memoria + localStorage por ahora, pendiente de migración.
  */
 import { db } from '../firebase.js'
-import { collection, doc, setDoc, updateDoc, onSnapshot, writeBatch, arrayUnion } from 'firebase/firestore'
+import { collection, doc, setDoc, updateDoc, onSnapshot, writeBatch, arrayUnion, query, orderBy, limit } from 'firebase/firestore'
 
 export const OPERATIONAL_GROUPS = [
     { id: 'escuela-discipulo', name: 'Escuela del Discípulo', field: 'escuela_discipulo', icon: 'BookOpen' },
@@ -356,6 +356,30 @@ export function updateLastSeen(userId) {
 export function isUserOnline(user) {
     if (!user?.last_seen) return false
     return Date.now() - new Date(user.last_seen).getTime() < ONLINE_THRESHOLD_MS
+}
+
+// ---- Chat en vivo (general, en tiempo real vía Firestore) ----
+// A diferencia del chat por grupo (que aún vive en localStorage con polling),
+// este se sincroniza directo con Firestore para que los mensajes lleguen de
+// inmediato a todos los conectados, sin refrescar.
+export function listenToGeneralMessages(callback) {
+    const q = query(collection(db, 'generalMessages'), orderBy('created_at', 'asc'), limit(200))
+    return onSnapshot(q, (snap) => {
+        callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    }, (err) => console.error('Error sincronizando el chat en vivo', err))
+}
+
+export function sendGeneralMessage({ content, sender_id, sender_name, sender_photo, media_url, media_type }) {
+    const messagesRef = collection(db, 'generalMessages')
+    setDoc(doc(messagesRef), {
+        content: content || '',
+        sender_id,
+        sender_name,
+        sender_photo: sender_photo || null,
+        media_url: media_url || null,
+        media_type: media_type || null,
+        created_at: new Date().toISOString(),
+    }).catch(err => console.error('No se pudo enviar el mensaje', err))
 }
 
 // Guarda el token de notificaciones push (FCM) del dispositivo actual en el

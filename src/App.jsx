@@ -19,6 +19,7 @@ import RefugiosPage from './pages/admin/RefugiosPage.jsx'
 import BroadcastPage from './pages/admin/BroadcastPage.jsx'
 import PrayerRequestsPage from './pages/shared/PrayerRequestsPage.jsx'
 import EventsPage from './pages/shared/EventsPage.jsx'
+import LiveChatPage from './pages/shared/LiveChatPage.jsx'
 import { OPERATIONAL_GROUPS } from './data/mockData.js'
 
 function AppLayout({ children }) {
@@ -163,6 +164,11 @@ export default function App() {
             <Route path="/:role/eventos" element={
                 <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee']}>
                     <AppLayout><EventsPage /></AppLayout>
+                </ProtectedRoute>
+            } />
+            <Route path="/:role/chat" element={
+                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee']}>
+                    <AppLayout><LiveChatPage /></AppLayout>
                 </ProtectedRoute>
             } />
 
