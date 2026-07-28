@@ -4,14 +4,11 @@ import { saveFcmToken } from '../data/mockData.js'
 
 // Generar en: Firebase Console > Configuración del proyecto > Cloud Messaging
 // > "Certificados push web" > Generar par de claves.
-const VAPID_KEY = 'PEGA_AQUI_TU_VAPID_KEY'
+const VAPID_KEY = 'BC0XiGn-0ebklP7H5TrnzGHWoaNrvK5TeOf4DLz6P9SHQKOsnX13RBbzIjlY75mdW8aIoyj6ACHC7aerdNS6Vl4'
 
 export async function enablePushNotifications(userId) {
     if (!('Notification' in window) || !(await isSupported().catch(() => false))) {
         return { error: 'Este navegador no soporta notificaciones push' }
-    }
-    if (VAPID_KEY === 'PEGA_AQUI_TU_VAPID_KEY') {
-        return { error: 'Falta configurar la clave VAPID en src/lib/push.js' }
     }
 
     const permission = await Notification.requestPermission()

@@ -8,7 +8,9 @@ import {
     updateProfile as updateFirebaseProfile,
 } from 'firebase/auth'
 import { auth, googleProvider } from '../firebase.js'
-import { updateUserProfile, createOrGetUserForFirebaseAccount, coreDataReadyPromise, startCoreDataSync } from '../data/mockData.js'
+import { updateUserProfile, createOrGetUserForFirebaseAccount, coreDataReadyPromise, startCoreDataSync, updateLastSeen } from '../data/mockData.js'
+
+const HEARTBEAT_INTERVAL_MS = 60 * 1000
 
 const AuthContext = createContext(null)
 
@@ -52,6 +54,13 @@ export function AuthProvider({ children }) {
         })
         return unsubscribe
     }, [])
+
+    useEffect(() => {
+        if (!user) return
+        updateLastSeen(user.id)
+        const interval = setInterval(() => updateLastSeen(user.id), HEARTBEAT_INTERVAL_MS)
+        return () => clearInterval(interval)
+    }, [user?.id])
 
     const login = useCallback(async (email, password) => {
         try {

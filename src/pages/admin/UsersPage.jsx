@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { getUsers, getMembers, createUser, updateUserProfile } from '../../data/mockData.js'
+import { getUsers, getMembers, createUser, updateUserProfile, isUserOnline } from '../../data/mockData.js'
 import UserAvatar from '../../components/ui/UserAvatar.jsx'
 import Modal from '../../components/ui/Modal.jsx'
 import { Shield, UserPlus, Edit2, Mail, UserCheck, CheckCircle2 } from 'lucide-react'
@@ -15,9 +15,18 @@ export default function UsersPage() {
     const [showCreateModal, setShowCreateModal] = useState(false)
     const [form, setForm] = useState(EMPTY_FORM)
     const [formError, setFormError] = useState('')
+    const [, setTick] = useState(0)
 
     useEffect(() => {
         refreshData()
+    }, [])
+
+    // El estado "en línea" depende del tiempo transcurrido, no solo de los
+    // datos: sin este refresco periódico, un usuario seguiría viéndose
+    // conectado en pantalla aunque ya se hayan pasado los 2 minutos.
+    useEffect(() => {
+        const interval = setInterval(() => setTick(t => t + 1), 15000)
+        return () => clearInterval(interval)
     }, [])
 
     const refreshData = () => {
@@ -75,7 +84,13 @@ export default function UsersPage() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-[#111111]">Gestión de Usuarios</h1>
-                    <p className="text-[#6E6E6E] mt-1">Administrar cuentas y roles de acceso</p>
+                    <p className="text-[#6E6E6E] mt-1 flex items-center gap-2">
+                        Administrar cuentas y roles de acceso
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-[#E1F9EC] text-[#13CD68]">
+                            <span className="w-2 h-2 rounded-full bg-[#13CD68] animate-pulse"></span>
+                            {users.filter(isUserOnline).length} conectados ahora
+                        </span>
+                    </p>
                 </div>
                 <button onClick={openCreateModal}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-medium text-sm transition-all hover:shadow-lg cursor-pointer"
@@ -99,13 +114,18 @@ export default function UsersPage() {
                     return (
                         <div key={user.id} className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] p-6 hover:shadow-[0_8px_24px_rgba(38,150,210,0.15)] transition-all hover:-translate-y-0.5">
                             <div className="flex items-start gap-4">
-                                <UserAvatar
-                                    photoUrl={user.photo_url}
-                                    name={user.name}
-                                    size="md"
-                                    bgColor={role.color}
-                                    className="rounded-2xl"
-                                />
+                                <div className="relative flex-shrink-0">
+                                    <UserAvatar
+                                        photoUrl={user.photo_url}
+                                        name={user.name}
+                                        size="md"
+                                        bgColor={role.color}
+                                        className="rounded-2xl"
+                                    />
+                                    {isUserOnline(user) && (
+                                        <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[#13CD68] border-2 border-white" title="En línea"></span>
+                                    )}
+                                </div>
                                 <div className="flex-1 min-w-0">
                                     <h3 className="text-base font-semibold text-[#111111] truncate">{user.name}</h3>
                                     <div className="flex items-center gap-1.5 mt-1 text-[#6E6E6E]">

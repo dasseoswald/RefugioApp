@@ -338,6 +338,26 @@ export function createUser(data) {
     return { data: newUser }
 }
 
+// ---- Presencia ("quién está conectado ahora") ----
+// Mientras la app está abierta, AuthContext llama a esto periódicamente para
+// marcar la última vez que el usuario estuvo activo. Se considera "en línea"
+// a quien tenga un latido dentro de los últimos ONLINE_THRESHOLD_MS.
+const ONLINE_THRESHOLD_MS = 2 * 60 * 1000
+
+export function updateLastSeen(userId) {
+    const index = USERS.findIndex(u => u.id === userId)
+    if (index === -1) return
+    const now = new Date().toISOString()
+    const updated = { ...USERS[index], last_seen: now }
+    USERS = USERS.map((u, i) => (i === index ? updated : u))
+    updateDoc(userDocRef(userId), { last_seen: now }).catch(err => console.error('No se pudo actualizar la presencia', err))
+}
+
+export function isUserOnline(user) {
+    if (!user?.last_seen) return false
+    return Date.now() - new Date(user.last_seen).getTime() < ONLINE_THRESHOLD_MS
+}
+
 // Guarda el token de notificaciones push (FCM) del dispositivo actual en el
 // usuario, para que la función en la nube pueda enviarle notificaciones.
 // Un mismo usuario puede tener varios tokens (uno por dispositivo/navegador).
