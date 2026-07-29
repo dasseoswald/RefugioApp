@@ -5,7 +5,7 @@
  * memoria + localStorage por ahora, pendiente de migración.
  */
 import { db } from '../firebase.js'
-import { collection, doc, setDoc, updateDoc, onSnapshot, writeBatch, arrayUnion, query, orderBy, limit } from 'firebase/firestore'
+import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch, arrayUnion, query, orderBy, limit } from 'firebase/firestore'
 
 export const OPERATIONAL_GROUPS = [
     { id: 'escuela-discipulo', name: 'Escuela del Discípulo', field: 'escuela_discipulo', icon: 'BookOpen' },
@@ -79,7 +79,7 @@ function generatePastSundays(count) {
 
 const pastSundays = generatePastSundays(14)
 
-const SERVICES = pastSundays.map((date, index) => ({
+let SERVICES = pastSundays.map((date, index) => ({
     id: `svc-${index + 1}`,
     name: index === 0 ? 'Servicio Dominical' : `Servicio Dominical`,
     service_date: date.toISOString().split('T')[0],
@@ -125,7 +125,7 @@ function generateAttendances() {
     return attendances
 }
 
-const ATTENDANCES = generateAttendances()
+let ATTENDANCES = generateAttendances()
 
 let USERS = [
     { id: 'user-1', email: 'dasse.oswald@gmail.com', role: 'admin', member_id: '5', name: 'Oswald Dassé', photo_url: null },
@@ -240,17 +240,25 @@ export function getActiveService(type) {
     return SERVICES.find(s => s.is_active) || SERVICES[0]
 }
 
+function serviceDocRef(id) { return doc(db, 'services', id) }
+function attendanceDocRef(id) { return doc(db, 'attendances', id) }
+
 export function createService(data) {
-    const newService = { service_type: 'sunday', ...data, id: `svc-${Date.now()}-${Math.floor(Math.random() * 1000)}`, is_active: false, created_at: new Date().toISOString() }
-    SERVICES.push(newService)
+    const id = `svc-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    const newService = { service_type: 'sunday', ...data, id, is_active: false, created_at: new Date().toISOString() }
+    SERVICES = [...SERVICES, newService]
+    const { id: _id, ...rest } = newService
+    setDoc(serviceDocRef(id), rest).catch(err => console.error('No se pudo guardar el servicio', err))
     return newService
 }
 
 export function updateService(id, data) {
     const index = SERVICES.findIndex(s => s.id === id)
     if (index === -1) return null
-    SERVICES[index] = { ...SERVICES[index], ...data }
-    return SERVICES[index]
+    const updated = { ...SERVICES[index], ...data }
+    SERVICES = SERVICES.map((s, i) => (i === index ? updated : s))
+    updateDoc(serviceDocRef(id), data).catch(err => console.error('No se pudo sincronizar el servicio', err))
+    return updated
 }
 
 // Activar un servicio solo desactiva otros de su MISMO tipo — un domingo
@@ -259,11 +267,15 @@ export function toggleServiceActive(id) {
     const target = SERVICES.find(s => s.id === id)
     if (!target) return null
     const nextActive = !target.is_active
-    SERVICES.forEach(s => {
-        if (s.service_type === target.service_type) {
-            s.is_active = (s.id === id) ? nextActive : false
-        }
+    const batch = writeBatch(db)
+    SERVICES = SERVICES.map(s => {
+        if (s.service_type !== target.service_type) return s
+        const isActive = (s.id === id) ? nextActive : false
+        if (isActive === s.is_active) return s
+        batch.update(serviceDocRef(s.id), { is_active: isActive })
+        return { ...s, is_active: isActive }
     })
+    batch.commit().catch(err => console.error('No se pudo sincronizar la activación del servicio', err))
     return SERVICES.find(s => s.id === id)
 }
 
@@ -281,16 +293,18 @@ export function registerAttendance(memberId, serviceId, method = 'manual', regis
     const existing = ATTENDANCES.find(a => a.member_id === memberId && a.service_id === serviceId && !a.is_cancelled)
     if (existing) return { error: 'Ya registrado en este servicio' }
 
-    const cancelled = ATTENDANCES.find(a => a.member_id === memberId && a.service_id === serviceId && a.is_cancelled)
-    if (cancelled) {
-        cancelled.is_cancelled = false
-        cancelled.notes = null
-        cancelled.check_in_time = new Date().toISOString()
-        return { data: cancelled }
+    const cancelledIndex = ATTENDANCES.findIndex(a => a.member_id === memberId && a.service_id === serviceId && a.is_cancelled)
+    if (cancelledIndex !== -1) {
+        const reactivated = { ...ATTENDANCES[cancelledIndex], is_cancelled: false, notes: null, check_in_time: new Date().toISOString() }
+        ATTENDANCES = ATTENDANCES.map((a, i) => (i === cancelledIndex ? reactivated : a))
+        updateDoc(attendanceDocRef(reactivated.id), { is_cancelled: false, notes: null, check_in_time: reactivated.check_in_time })
+            .catch(err => console.error('No se pudo sincronizar la asistencia', err))
+        return { data: reactivated }
     }
 
+    const id = `att-${Date.now()}-${Math.floor(Math.random() * 1000)}`
     const attendance = {
-        id: `att-${Date.now()}-${Math.floor(Math.random() * 1000)}`, // Unique ID
+        id,
         member_id: memberId,
         service_id: serviceId,
         check_in_time: new Date().toISOString(),
@@ -300,17 +314,18 @@ export function registerAttendance(memberId, serviceId, method = 'manual', regis
         notes: null,
         is_cancelled: false,
     }
-    ATTENDANCES.push(attendance)
+    ATTENDANCES = [...ATTENDANCES, attendance]
+    const { id: _id, ...rest } = attendance
+    setDoc(attendanceDocRef(id), rest).catch(err => console.error('No se pudo guardar la asistencia', err))
     return { data: attendance }
 }
 
 export function cancelAttendance(id, reason) {
     const idx = ATTENDANCES.findIndex(a => a.id === id)
-    if (idx !== -1) {
-        ATTENDANCES.splice(idx, 1) // In mock mode, delete it to keep it simple for the toggle
-        return true
-    }
-    return false
+    if (idx === -1) return false
+    ATTENDANCES = ATTENDANCES.filter(a => a.id !== id)
+    deleteDoc(attendanceDocRef(id)).catch(err => console.error('No se pudo eliminar la asistencia', err))
+    return true
 }
 
 export function findAttendanceByMemberAndService(memberId, serviceId) {
@@ -1166,10 +1181,11 @@ const STORAGE_KEY = 'churchattend_mock_db_v1'
 // Nota: MEMBERS y USERS ya NO se guardan aquí — viven en Firestore (ver
 // más abajo "Sincronización con Firestore"), compartidos entre todos los
 // dispositivos. El resto de las "tablas" sigue en memoria + localStorage.
-// MEMBER_PROFILES y GROUP_NOTICES ya NO se guardan aquí — viven en Firestore
-// (ver más abajo). GROUP_MESSAGES (chat) sigue pendiente de migración.
+// MEMBER_PROFILES, GROUP_NOTICES, SERVICES y ATTENDANCES ya NO se guardan
+// aquí — viven en Firestore (ver más abajo). GROUP_MESSAGES (chat) sigue
+// pendiente de migración.
 const COLLECTIONS = {
-    SERVICES, ATTENDANCES, SYSTEM_SETTINGS,
+    SYSTEM_SETTINGS,
     ESCUELA_CLASSES, ESCUELA_ATTENDANCES, ESCUELA_ENROLLMENTS,
     REFUGIOS, REFUGIO_ENROLLMENTS,
     PROFILE_NOTES,
@@ -1233,10 +1249,12 @@ let membersFirstLoad = true
 let usersFirstLoad = true
 let profilesFirstLoad = true
 let noticesFirstLoad = true
+let servicesFirstLoad = true
+let attendancesFirstLoad = true
 let coreSyncStarted = false
 
 function checkCoreDataReady() {
-    if (!membersFirstLoad && !usersFirstLoad && !profilesFirstLoad && !noticesFirstLoad) resolveCoreDataReady()
+    if (!membersFirstLoad && !usersFirstLoad && !profilesFirstLoad && !noticesFirstLoad && !servicesFirstLoad && !attendancesFirstLoad) resolveCoreDataReady()
 }
 
 export function startCoreDataSync() {
@@ -1325,6 +1343,30 @@ export function startCoreDataSync() {
     }, (err) => {
         console.error('Error sincronizando avisos', err)
         noticesFirstLoad = false
+        checkCoreDataReady()
+    })
+
+    // Servicios y asistencias: a propósito NO se siembran los datos de
+    // ejemplo (eran ficticios, generados solo para la demo local) — la
+    // colección arranca vacía en Firestore y se llena con el uso real de
+    // la iglesia de aquí en adelante.
+    onSnapshot(collection(db, 'services'), (snap) => {
+        SERVICES = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        servicesFirstLoad = false
+        checkCoreDataReady()
+    }, (err) => {
+        console.error('Error sincronizando servicios', err)
+        servicesFirstLoad = false
+        checkCoreDataReady()
+    })
+
+    onSnapshot(collection(db, 'attendances'), (snap) => {
+        ATTENDANCES = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        attendancesFirstLoad = false
+        checkCoreDataReady()
+    }, (err) => {
+        console.error('Error sincronizando asistencias', err)
+        attendancesFirstLoad = false
         checkCoreDataReady()
     })
 }
