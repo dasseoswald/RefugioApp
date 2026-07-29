@@ -2,7 +2,9 @@ import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { getMemberById, updateMember, getMemberProfile, updateMemberProfile } from '../../data/mockData.js'
 import { enablePushNotifications, getNotificationPermission } from '../../lib/push.js'
+import { isIOSDevice, isStandaloneDisplay } from '../../lib/installPrompt.js'
 import UserAvatar from '../../components/ui/UserAvatar.jsx'
+import InstallAppCard from '../../components/shared/InstallAppCard.jsx'
 import {
     Camera, Save, CheckCircle2, AlertCircle, Mail, Shield, User, Cake, Heart, Phone, UserCheck,
     MapPin, Briefcase, Church, Users as UsersIcon, Droplets, AlertTriangle, Calendar, Bell, BellRing,
@@ -285,6 +287,9 @@ export default function ProfilePage() {
                 </div>
             </div>
 
+            {/* Instalar la app */}
+            <InstallAppCard />
+
             {/* Notificaciones push */}
             <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] p-6">
                 <div className="flex items-center justify-between gap-4">
@@ -299,11 +304,13 @@ export default function ProfilePage() {
                                     ? 'Activadas en este dispositivo'
                                     : notifPermission === 'denied'
                                         ? 'Bloqueadas. Actívalas en la configuración de tu navegador'
-                                        : 'Recibe avisos de tus grupos aunque no tengas la app abierta'}
+                                        : notifPermission === 'unsupported' && isIOSDevice() && !isStandaloneDisplay()
+                                            ? 'En iPhone, primero debes instalar la app (arriba) para poder activarlas'
+                                            : 'Recibe avisos de tus grupos aunque no tengas la app abierta'}
                             </p>
                         </div>
                     </div>
-                    {notifPermission !== 'granted' && notifPermission !== 'denied' && (
+                    {notifPermission !== 'granted' && notifPermission !== 'denied' && !(notifPermission === 'unsupported' && isIOSDevice() && !isStandaloneDisplay()) && (
                         <button
                             onClick={handleEnableNotifications}
                             disabled={enablingNotifs}

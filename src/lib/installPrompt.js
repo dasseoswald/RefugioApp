@@ -31,3 +31,16 @@ export function isStandaloneDisplay() {
 export function isIOSDevice() {
     return /iphone|ipad|ipod/i.test(window.navigator.userAgent)
 }
+
+// WhatsApp, Instagram, Facebook, etc. abren los links en su propio navegador
+// reducido dentro de la app. Ahí iOS no permite "Agregar a pantalla de
+// inicio" ni notificaciones push, sin importar el código — hay que avisarle
+// al usuario que lo abra en Safari.
+export function isInAppBrowser() {
+    const ua = window.navigator.userAgent
+    if (/FBAN|FBAV|Instagram|Line\/|WhatsApp|Twitter|TikTok|MicroMessenger/i.test(ua)) return true
+    // Los navegadores "in-app" de iOS normalmente no incluyen "Safari" en el
+    // user agent (a diferencia de Safari real, o Chrome/Firefox para iOS).
+    if (isIOSDevice() && !/Safari/i.test(ua)) return true
+    return false
+}
