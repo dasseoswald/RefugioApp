@@ -3,18 +3,22 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import Modal from '../ui/Modal.jsx'
 import { enablePushNotifications, getNotificationPermission } from '../../lib/push.js'
 import { getDeferredInstallPrompt, onInstallPromptAvailable, isStandaloneDisplay, isIOSDevice, isInAppBrowser } from '../../lib/installPrompt.js'
+import { PASSWORD_PROMPT_SEEN_KEY } from './SetPasswordPrompt.jsx'
 import { Download, Bell, Share } from 'lucide-react'
 
 const STORAGE_KEY = 'refugio_onboarding_done'
 
 export default function OnboardingPrompt() {
-    const { user } = useAuth()
+    const { user, needsPassword } = useAuth()
     const [step, setStep] = useState(null)
     const [installPrompt, setInstallPrompt] = useState(null)
     const [enabling, setEnabling] = useState(false)
 
     useEffect(() => {
-        if (!user || localStorage.getItem(STORAGE_KEY)) return
+        // Se espera a que el popup de "crear contraseña" se resuelva primero
+        // (ver SetPasswordPrompt), para no mostrar dos ventanas a la vez.
+        const passwordPromptPending = needsPassword && !localStorage.getItem(PASSWORD_PROMPT_SEEN_KEY)
+        if (!user || passwordPromptPending || localStorage.getItem(STORAGE_KEY)) return
 
         if (isIOSDevice() && isInAppBrowser()) {
             setStep('open-in-safari')
@@ -32,7 +36,7 @@ export default function OnboardingPrompt() {
         else if (canNotify) setStep('notifications')
 
         return unsubscribe
-    }, [user])
+    }, [user, needsPassword])
 
     const finish = () => {
         localStorage.setItem(STORAGE_KEY, '1')

@@ -5,6 +5,7 @@ import { enablePushNotifications, getNotificationPermission } from '../../lib/pu
 import { isIOSDevice, isStandaloneDisplay } from '../../lib/installPrompt.js'
 import UserAvatar from '../../components/ui/UserAvatar.jsx'
 import InstallAppCard from '../../components/shared/InstallAppCard.jsx'
+import PasswordCard from '../../components/shared/PasswordCard.jsx'
 import {
     Camera, Save, CheckCircle2, AlertCircle, Mail, Shield, User, Cake, Heart, Phone, UserCheck,
     MapPin, Briefcase, Church, Users as UsersIcon, Droplets, AlertTriangle, Calendar, Bell, BellRing,
@@ -289,6 +290,9 @@ export default function ProfilePage() {
 
             {/* Instalar la app */}
             <InstallAppCard />
+
+            {/* Contraseña de respaldo (cuentas de Google) */}
+            <PasswordCard />
 
             {/* Notificaciones push */}
             <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] p-6">

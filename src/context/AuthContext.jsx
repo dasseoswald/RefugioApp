@@ -6,6 +6,8 @@ import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
     updateProfile as updateFirebaseProfile,
+    linkWithCredential,
+    EmailAuthProvider,
 } from 'firebase/auth'
 import { auth, googleProvider } from '../firebase.js'
 import { updateUserProfile, createOrGetUserForFirebaseAccount, coreDataReadyPromise, startCoreDataSync, updateLastSeen } from '../data/mockData.js'
@@ -29,11 +31,14 @@ const AUTH_ERROR_MESSAGES = {
     'auth/invalid-email': 'El correo no es válido.',
     'auth/weak-password': 'La contraseña es muy débil. Usa al menos 6 caracteres.',
     'auth/popup-closed-by-user': 'Se cerró la ventana de Google antes de continuar.',
+    'auth/requires-recent-login': 'Por seguridad, vuelve a iniciar sesión e inténtalo de nuevo.',
+    'auth/credential-already-in-use': 'Ese correo ya tiene una contraseña creada en otra cuenta.',
 }
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null)
     const [loading, setLoading] = useState(true)
+    const [needsPassword, setNeedsPassword] = useState(false)
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -46,9 +51,14 @@ export function AuthProvider({ children }) {
                     photoURL: firebaseUser.photoURL,
                 })
                 pendingRegistrationName = null
+                // Si entró con Google y todavía no tiene contraseña propia,
+                // le ofrecemos crear una (útil cuando Google no funciona,
+                // p. ej. dentro del navegador de WhatsApp/Instagram).
+                setNeedsPassword(!firebaseUser.providerData.some(p => p.providerId === 'password'))
                 setUser(appUser)
             } else {
                 setUser(null)
+                setNeedsPassword(false)
             }
             setLoading(false)
         })
@@ -94,6 +104,19 @@ export function AuthProvider({ children }) {
         }
     }, [])
 
+    const setAccountPassword = useCallback(async (password) => {
+        try {
+            const firebaseUser = auth.currentUser
+            if (!firebaseUser?.email) return { error: 'No hay usuario autenticado' }
+            const credential = EmailAuthProvider.credential(firebaseUser.email, password)
+            await linkWithCredential(firebaseUser, credential)
+            setNeedsPassword(false)
+            return { data: true }
+        } catch (err) {
+            return { error: AUTH_ERROR_MESSAGES[err.code] || 'No se pudo crear la contraseña. Inténtalo de nuevo.' }
+        }
+    }, [])
+
     const logout = useCallback(async () => {
         await signOut(auth)
     }, [])
@@ -106,7 +129,7 @@ export function AuthProvider({ children }) {
         return { data: updatedUser }
     }, [user])
 
-    const value = { user, loading, login, loginWithGoogle, register, logout, updateProfile, isAuthenticated: !!user }
+    const value = { user, loading, login, loginWithGoogle, register, logout, updateProfile, needsPassword, setAccountPassword, isAuthenticated: !!user }
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

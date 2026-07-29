@@ -22,6 +22,7 @@ import EventsPage from './pages/shared/EventsPage.jsx'
 import LiveChatPage from './pages/shared/LiveChatPage.jsx'
 import RadioPage from './pages/shared/RadioPage.jsx'
 import OnboardingPrompt from './components/shared/OnboardingPrompt.jsx'
+import SetPasswordPrompt from './components/shared/SetPasswordPrompt.jsx'
 import { OPERATIONAL_GROUPS } from './data/mockData.js'
 
 function AppLayout({ children }) {
@@ -31,6 +32,7 @@ function AppLayout({ children }) {
             <main className="min-h-screen p-4 pt-20 lg:ml-64 lg:p-8">
                 {children}
             </main>
+            <SetPasswordPrompt />
             <OnboardingPrompt />
         </div>
     )
