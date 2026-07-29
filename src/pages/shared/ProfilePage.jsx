@@ -6,6 +6,7 @@ import { isIOSDevice, isStandaloneDisplay } from '../../lib/installPrompt.js'
 import UserAvatar from '../../components/ui/UserAvatar.jsx'
 import InstallAppCard from '../../components/shared/InstallAppCard.jsx'
 import PasswordCard from '../../components/shared/PasswordCard.jsx'
+import ShareAppCard from '../../components/shared/ShareAppCard.jsx'
 import {
     Camera, Save, CheckCircle2, AlertCircle, Mail, Shield, User, Cake, Heart, Phone, UserCheck,
     MapPin, Briefcase, Church, Users as UsersIcon, Droplets, AlertTriangle, Calendar, Bell, BellRing,
@@ -287,6 +288,9 @@ export default function ProfilePage() {
                     </div>
                 </div>
             </div>
+
+            {/* Compartir e invitar */}
+            <ShareAppCard />
 
             {/* Instalar la app */}
             <InstallAppCard />
