@@ -1,7 +1,7 @@
 {
     "name": "Refugio App",
     "short_name": "Refugio App",
-    "description": "Sistema de Control de Asistencia para Servicios Dominicales",
+    "description": "Somos un refugio para la familia",
     "start_url": "/",
     "scope": "/",
     "display": "standalone",

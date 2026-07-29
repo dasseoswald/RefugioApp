@@ -57,7 +57,7 @@ export default function LoginPage() {
                     <h1 className="text-5xl font-bold mb-4 leading-tight">
                         Refugio<span className="text-[#E8A838]"> App</span>
                     </h1>
-                    <p className="text-xl text-white/70 mb-6">Sistema de Control de Asistencia para Servicios Dominicales</p>
+                    <p className="text-xl text-white/70 mb-6">Somos un refugio para la familia</p>
                     <div className="flex items-center justify-center gap-2 text-white/40 text-sm">
                         <div className="w-2 h-2 rounded-full bg-[#13CD68]"></div>
                         <span>Seguro • Confiable • Moderno</span>

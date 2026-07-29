@@ -103,7 +103,7 @@ export default function Sidebar() {
                     </div>
                     <div>
                         <h1 className="text-white font-bold text-lg leading-tight">Refugio App</h1>
-                        <p className="text-white/50 text-xs">Control de Asistencia</p>
+                        <p className="text-white/50 text-xs">Somos un refugio para la familia</p>
                     </div>
                 </div>
                 <button onClick={() => setMobileOpen(false)} className="lg:hidden text-white/60 hover:text-white p-1 cursor-pointer" aria-label="Cerrar menú">
