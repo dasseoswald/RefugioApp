@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react'
+import { isInAppBrowser } from '../lib/installPrompt.js'
+import InAppBrowserBanner from '../components/shared/InAppBrowserBanner.jsx'
 import logo from '../assets/logo.png'
 
 function GoogleIcon() {
@@ -38,6 +40,10 @@ export default function LoginPage() {
 
     const handleGoogle = async () => {
         setError('')
+        if (isInAppBrowser()) {
+            setError('Google no permite iniciar sesión desde aquí. Abre este link en Safari o Chrome (toca ••• arriba y elige "Abrir en Safari").')
+            return
+        }
         setIsLoading(true)
         const result = await loginWithGoogle()
         setIsLoading(false)
@@ -82,6 +88,8 @@ export default function LoginPage() {
 
                         <h2 className="text-2xl font-bold text-[#111111] mb-1">Bienvenido</h2>
                         <p className="text-[#6E6E6E] text-sm mb-8">Inicia sesión para continuar</p>
+
+                        <InAppBrowserBanner />
 
                         <form onSubmit={handleSubmit} className="space-y-5">
                             {/* Email */}

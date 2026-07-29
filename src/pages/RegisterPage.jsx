@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { User, Mail, Lock, ArrowRight, Eye, EyeOff, CheckCircle2 } from 'lucide-react'
+import { isInAppBrowser } from '../lib/installPrompt.js'
+import InAppBrowserBanner from '../components/shared/InAppBrowserBanner.jsx'
 import logo from '../assets/logo.png'
 
 function GoogleIcon() {
@@ -47,6 +49,10 @@ export default function RegisterPage() {
 
     const handleGoogle = async () => {
         setError('')
+        if (isInAppBrowser()) {
+            setError('Google no permite registrarse desde aquí. Abre este link en Safari o Chrome (toca ••• arriba y elige "Abrir en Safari").')
+            return
+        }
         setIsLoading(true)
         const result = await loginWithGoogle()
         setIsLoading(false)
@@ -108,6 +114,8 @@ export default function RegisterPage() {
 
                         <h2 className="text-2xl font-bold text-[#111111] mb-1">Crear cuenta</h2>
                         <p className="text-[#6E6E6E] text-sm mb-8">Rápido y sin complicaciones</p>
+
+                        <InAppBrowserBanner />
 
                         <form onSubmit={handleSubmit} className="space-y-5">
                             {/* Nombre */}
