@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth, GoogleAuthProvider } from 'firebase/auth'
+import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 
 const firebaseConfig = {
@@ -13,6 +13,9 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
+// La sesión queda guardada en el dispositivo (no expira al cerrar la
+// pestaña/app) hasta que la persona cierre sesión manualmente.
+setPersistence(auth, browserLocalPersistence).catch(err => console.error('No se pudo configurar la persistencia de sesión', err))
 export const googleProvider = new GoogleAuthProvider()
 export const db = getFirestore(app)
 export { app, firebaseConfig }
