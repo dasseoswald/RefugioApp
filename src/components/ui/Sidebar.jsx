@@ -10,8 +10,11 @@ import {
     CalendarDays, LogOut, Shield,
     UserCheck, BookOpen, Sprout, ChevronDown, ChevronRight,
     UserCircle, UserSquare, Baby, Music, Layers, Megaphone, HandHeart, PartyPopper,
-    Menu, X, MessageCircle, Radio, Share2, Check
+    Menu, X, MessageCircle, Radio, Share2, Check, Facebook, Instagram
 } from 'lucide-react'
+
+const INSTAGRAM_URL = 'https://www.instagram.com/unrefugioparalafamilia/'
+const FACEBOOK_URL = 'https://www.facebook.com/unrefugioparalafamilia'
 
 const NAV_CONFIG = {
     admin: [
@@ -237,6 +240,24 @@ export default function Sidebar() {
                     {shareCopied ? <Check className="w-5 h-5" /> : <Share2 className="w-5 h-5" />}
                     <span>{shareCopied ? 'Link copiado' : 'Compartir App'}</span>
                 </button>
+                <a
+                    href={FACEBOOK_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all duration-200"
+                >
+                    <Facebook className="w-5 h-5" />
+                    <span>Facebook</span>
+                </a>
+                <a
+                    href={INSTAGRAM_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all duration-200"
+                >
+                    <Instagram className="w-5 h-5" />
+                    <span>Instagram</span>
+                </a>
                 <button
                     onClick={handleLogout}
                     className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all duration-200 cursor-pointer"
