@@ -7,6 +7,7 @@ import {
     signInWithEmailAndPassword,
     updateProfile as updateFirebaseProfile,
     linkWithCredential,
+    reauthenticateWithCredential,
     EmailAuthProvider,
 } from 'firebase/auth'
 import { auth, googleProvider } from '../firebase.js'
@@ -46,6 +47,7 @@ export function AuthProvider({ children }) {
                 startCoreDataSync()
                 await coreDataReadyPromise
                 const appUser = createOrGetUserForFirebaseAccount({
+                    uid: firebaseUser.uid,
                     email: firebaseUser.email,
                     displayName: pendingRegistrationName || firebaseUser.displayName,
                     photoURL: firebaseUser.photoURL,
@@ -117,6 +119,21 @@ export function AuthProvider({ children }) {
         }
     }, [])
 
+    // Confirma la contraseña del usuario actualmente autenticado (no la del
+    // usuario objetivo). Se usa para acciones sensibles, como que un admin
+    // asigne el rol de Tesorero, antes de aplicar el cambio.
+    const confirmPassword = useCallback(async (password) => {
+        try {
+            const firebaseUser = auth.currentUser
+            if (!firebaseUser?.email) return { error: 'No hay usuario autenticado' }
+            const credential = EmailAuthProvider.credential(firebaseUser.email, password)
+            await reauthenticateWithCredential(firebaseUser, credential)
+            return { data: true }
+        } catch (err) {
+            return { error: AUTH_ERROR_MESSAGES[err.code] || 'Contraseña incorrecta.' }
+        }
+    }, [])
+
     const logout = useCallback(async () => {
         await signOut(auth)
     }, [])
@@ -129,7 +146,7 @@ export function AuthProvider({ children }) {
         return { data: updatedUser }
     }, [user])
 
-    const value = { user, loading, login, loginWithGoogle, register, logout, updateProfile, needsPassword, setAccountPassword, isAuthenticated: !!user }
+    const value = { user, loading, login, loginWithGoogle, register, logout, updateProfile, needsPassword, setAccountPassword, confirmPassword, isAuthenticated: !!user }
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

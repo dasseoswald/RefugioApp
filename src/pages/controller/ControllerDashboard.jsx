@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react'
-import { getActiveService, getAttendancesByService, getMembers, getMemberById } from '../../data/mockData.js'
+import { useNavigate } from 'react-router-dom'
+import { getActiveService, getAttendancesByService, getMembers, getMemberById, getVisitorsDueWelcomeThisWeek } from '../../data/mockData.js'
 import StatsCard from '../../components/ui/StatsCard.jsx'
-import { Users, UserCheck, Clock, Fingerprint, Eye, CalendarDays } from 'lucide-react'
+import { Users, UserCheck, Clock, Fingerprint, Eye, CalendarDays, HeartHandshake } from 'lucide-react'
 import NovedadesCarousel from '../../components/shared/NovedadesCarousel.jsx'
 import NextEventBanner from '../../components/shared/NextEventBanner.jsx'
 
 export default function ControllerDashboard() {
+    const navigate = useNavigate()
     const [activeService, setActiveService] = useState(null)
     const [attendances, setAttendances] = useState([])
     const [members, setMembers] = useState([])
+    const [welcomeDue, setWelcomeDue] = useState([])
 
     useEffect(() => {
         const service = getActiveService()
@@ -17,6 +20,7 @@ export default function ControllerDashboard() {
             setAttendances(getAttendancesByService(service.id))
         }
         setMembers(getMembers())
+        setWelcomeDue(getVisitorsDueWelcomeThisWeek())
     }, [])
 
     const totalAttendees = attendances.length
@@ -72,6 +76,38 @@ export default function ControllerDashboard() {
                     subtitle="Total en el sistema"
                 />
             </div>
+
+            {/* Seguimiento de bienvenida a visitantes */}
+            {welcomeDue.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] overflow-hidden">
+                    <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                        <HeartHandshake className="w-5 h-5 text-[#2696D2]" />
+                        <h3 className="text-lg font-semibold text-[#111111]">Bienvenida a Visitantes Esta Semana</h3>
+                    </div>
+                    <div className="divide-y divide-gray-50">
+                        {welcomeDue.map(({ member, checks, action }) => (
+                            <button
+                                key={member.id}
+                                onClick={() => navigate(`/controller/member/${member.id}`)}
+                                className="w-full px-6 py-4 flex items-center justify-between hover:bg-[#E8F4FC]/50 transition-colors text-left cursor-pointer"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 rounded-full bg-[#2696D2] flex items-center justify-center text-white text-sm font-semibold">
+                                        {member.full_name.charAt(0)}
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-[#111111]">{member.full_name}</p>
+                                        <p className="text-xs text-[#6E6E6E]">{checks} {checks === 1 ? 'servicio' : 'servicios'} asistidos</p>
+                                    </div>
+                                </div>
+                                <span className="text-xs px-3 py-1.5 rounded-full bg-[#E1F9EC] text-[#13CD68] font-semibold">
+                                    {action}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Attendee list */}
             <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] overflow-hidden">

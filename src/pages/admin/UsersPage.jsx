@@ -3,12 +3,12 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { getUsers, getMembers, createUser, updateUserProfile, isUserOnline } from '../../data/mockData.js'
 import UserAvatar from '../../components/ui/UserAvatar.jsx'
 import Modal from '../../components/ui/Modal.jsx'
-import { Shield, UserPlus, Edit2, Mail, UserCheck, CheckCircle2 } from 'lucide-react'
+import { Shield, UserPlus, Edit2, Mail, UserCheck, CheckCircle2, Landmark } from 'lucide-react'
 
 const EMPTY_FORM = { name: '', email: '', role: 'attendee', member_id: '' }
 
 export default function UsersPage() {
-    const { user: currentUser } = useAuth()
+    const { user: currentUser, confirmPassword } = useAuth()
     const [users, setUsers] = useState([])
     const [members, setMembers] = useState([])
     const [notification, setNotification] = useState(null)
@@ -16,6 +16,10 @@ export default function UsersPage() {
     const [form, setForm] = useState(EMPTY_FORM)
     const [formError, setFormError] = useState('')
     const [, setTick] = useState(0)
+    const [pendingRoleChange, setPendingRoleChange] = useState(null)
+    const [confirmPasswordValue, setConfirmPasswordValue] = useState('')
+    const [confirmError, setConfirmError] = useState('')
+    const [confirming, setConfirming] = useState(false)
 
     useEffect(() => {
         refreshData()
@@ -38,6 +42,7 @@ export default function UsersPage() {
         admin: { label: 'Administrador', color: '#2696D2', bg: '#E8F4FC' },
         controller: { label: 'Controlador', color: '#13CD68', bg: '#E1F9EC' },
         attendee: { label: 'Asistente', color: '#E8A838', bg: '#FFF3CD' },
+        tesorero: { label: 'Tesorero', color: '#9B59B6', bg: '#F3E8FB' },
     }
 
     const showNotification = (message, type = 'success') => {
@@ -51,12 +56,7 @@ export default function UsersPage() {
         setShowCreateModal(true)
     }
 
-    const handleCreateUser = () => {
-        setFormError('')
-        if (!form.name.trim() || !form.email.trim()) {
-            setFormError('Nombre y correo electrónico son obligatorios')
-            return
-        }
+    const doCreateUser = () => {
         const result = createUser({
             name: form.name.trim(),
             email: form.email.trim(),
@@ -72,11 +72,59 @@ export default function UsersPage() {
         showNotification(`Usuario ${result.data.name} creado como ${roleConfig[result.data.role].label}`)
     }
 
-    const handleChangeRole = (targetUser, newRole) => {
-        if (newRole === targetUser.role) return
+    // Crear un usuario con rol Tesorero también exige confirmar contraseña,
+    // por la misma razón que cambiar el rol de alguien existente.
+    const handleCreateUser = () => {
+        setFormError('')
+        if (!form.name.trim() || !form.email.trim()) {
+            setFormError('Nombre y correo electrónico son obligatorios')
+            return
+        }
+        if (form.role === 'tesorero') {
+            setPendingRoleChange({ type: 'create' })
+            setConfirmPasswordValue('')
+            setConfirmError('')
+            return
+        }
+        doCreateUser()
+    }
+
+    const applyRoleChange = (targetUser, newRole) => {
         updateUserProfile(targetUser.id, { role: newRole })
         refreshData()
         showNotification(`${targetUser.name} ahora es ${roleConfig[newRole].label}`)
+    }
+
+    // Asignar (o quitar) el rol de Tesorero exige que el administrador
+    // confirme su propia contraseña antes de aplicar el cambio, ya que ese
+    // rol desbloquea datos financieros confidenciales.
+    const handleChangeRole = (targetUser, newRole) => {
+        if (newRole === targetUser.role) return
+        if (newRole === 'tesorero' || targetUser.role === 'tesorero') {
+            setPendingRoleChange({ type: 'change', targetUser, newRole })
+            setConfirmPasswordValue('')
+            setConfirmError('')
+            return
+        }
+        applyRoleChange(targetUser, newRole)
+    }
+
+    const handleConfirmRoleChange = async () => {
+        if (!pendingRoleChange) return
+        setConfirming(true)
+        setConfirmError('')
+        const result = await confirmPassword(confirmPasswordValue)
+        setConfirming(false)
+        if (result.error) {
+            setConfirmError(result.error)
+            return
+        }
+        if (pendingRoleChange.type === 'create') {
+            doCreateUser()
+        } else {
+            applyRoleChange(pendingRoleChange.targetUser, pendingRoleChange.newRole)
+        }
+        setPendingRoleChange(null)
     }
 
     return (
@@ -149,6 +197,7 @@ export default function UsersPage() {
                                     >
                                         <option value="attendee">Asistente</option>
                                         <option value="controller">Controlador</option>
+                                        <option value="tesorero">Tesorero</option>
                                         <option value="admin">Administrador</option>
                                     </select>
                                 )}
@@ -176,26 +225,29 @@ export default function UsersPage() {
                                 <th className="text-center px-4 py-2 font-medium" style={{ color: '#E8A838' }}>Asistente</th>
                                 <th className="text-center px-4 py-2 font-medium" style={{ color: '#13CD68' }}>Controlador</th>
                                 <th className="text-center px-4 py-2 font-medium" style={{ color: '#2696D2' }}>Admin</th>
+                                <th className="text-center px-4 py-2 font-medium" style={{ color: '#9B59B6' }}>Tesorero</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white">
                             {[
-                                ['Registrar propia asistencia', true, true, true],
-                                ['Registrar asistencia de terceros', false, true, true],
-                                ['Gestión de miembros', false, true, true],
-                                ['Ver reportes', false, true, true],
-                                ['Exportar PDF/Excel', false, true, true],
-                                ['Gestionar servicios', false, false, true],
-                                ['Gestionar usuarios', false, false, true],
-                                ['Crear otro Administrador', false, false, true],
-                                ['Enviar mensajes a todos los grupos', false, false, true],
-                                ['Configurar sistema', false, false, true],
-                            ].map(([perm, att, ctrl, admin]) => (
+                                ['Registrar propia asistencia', true, true, true, true],
+                                ['Registrar asistencia de terceros', false, true, true, false],
+                                ['Gestión de miembros', false, true, true, false],
+                                ['Ver reportes', false, true, true, false],
+                                ['Exportar PDF/Excel', false, true, true, false],
+                                ['Gestionar servicios', false, false, true, false],
+                                ['Gestionar usuarios', false, false, true, false],
+                                ['Crear otro Administrador', false, false, true, false],
+                                ['Enviar mensajes a todos los grupos', false, false, true, false],
+                                ['Configurar sistema', false, false, true, false],
+                                ['Ver ofrendas y diezmos (confidencial)', false, false, false, true],
+                            ].map(([perm, att, ctrl, admin, tesorero]) => (
                                 <tr key={perm} className="hover:bg-white/60 transition-colors">
                                     <td className="px-4 py-2.5 text-[#111111] font-medium">{perm}</td>
                                     <td className="text-center px-4 py-2.5">{att ? '✅' : '❌'}</td>
                                     <td className="text-center px-4 py-2.5">{ctrl ? '✅' : '❌'}</td>
                                     <td className="text-center px-4 py-2.5">{admin ? '✅' : '❌'}</td>
+                                    <td className="text-center px-4 py-2.5">{tesorero ? '✅' : '❌'}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -210,6 +262,12 @@ export default function UsersPage() {
                         <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-[#E8F4FC] text-xs text-[#111111]">
                             <Shield className="w-4 h-4 text-[#2696D2] flex-shrink-0 mt-0.5" />
                             <span>Estás creando otra cuenta de <strong>Administrador</strong> como {currentUser?.name}. Solo administradores pueden otorgar este rol.</span>
+                        </div>
+                    )}
+                    {form.role === 'tesorero' && (
+                        <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-[#F3E8FB] text-xs text-[#111111]">
+                            <Landmark className="w-4 h-4 text-[#9B59B6] flex-shrink-0 mt-0.5" />
+                            <span>El rol <strong>Tesorero</strong> desbloquea la sección confidencial de Finanzas (ofrendas y diezmos), oculta incluso para administradores. Te pediremos confirmar tu contraseña.</span>
                         </div>
                     )}
                     <div>
@@ -228,6 +286,7 @@ export default function UsersPage() {
                             className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] text-sm cursor-pointer">
                             <option value="attendee">Asistente</option>
                             <option value="controller">Controlador</option>
+                            <option value="tesorero">Tesorero</option>
                             <option value="admin">Administrador</option>
                         </select>
                     </div>
@@ -251,6 +310,43 @@ export default function UsersPage() {
                         className="px-5 py-2.5 rounded-xl text-white font-medium text-sm hover:shadow-lg cursor-pointer"
                         style={{ background: 'linear-gradient(135deg, #2696D2, #1D74A8)' }}>
                         Crear Usuario
+                    </button>
+                </div>
+            </Modal>
+
+            {/* Confirmación de contraseña para asignar/quitar el rol Tesorero */}
+            <Modal isOpen={!!pendingRoleChange} onClose={() => setPendingRoleChange(null)} title="Confirma tu contraseña">
+                <div className="space-y-4">
+                    <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-[#F3E8FB] text-xs text-[#111111]">
+                        <Landmark className="w-4 h-4 text-[#9B59B6] flex-shrink-0 mt-0.5" />
+                        <span>
+                            {pendingRoleChange?.type === 'create'
+                                ? <>Vas a crear a <strong>{form.name || 'este usuario'}</strong> con el rol <strong>Tesorero</strong>, que da acceso a datos financieros confidenciales.</>
+                                : <>Vas a cambiar el rol de <strong>{pendingRoleChange?.targetUser?.name}</strong> a <strong>{pendingRoleChange && roleConfig[pendingRoleChange.newRole]?.label}</strong>, lo que afecta el acceso a la sección confidencial de Finanzas.</>}
+                            {' '}Confirma tu contraseña para continuar.
+                        </span>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-[#111111] mb-1.5">Tu contraseña</label>
+                        <input
+                            type="password"
+                            value={confirmPasswordValue}
+                            onChange={(e) => setConfirmPasswordValue(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmRoleChange() }}
+                            placeholder="••••••••"
+                            className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] text-sm"
+                        />
+                    </div>
+                    {confirmError && (
+                        <div className="bg-[#FADBD8] text-[#E74C3C] text-sm px-4 py-3 rounded-xl">{confirmError}</div>
+                    )}
+                </div>
+                <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+                    <button onClick={() => setPendingRoleChange(null)} className="px-5 py-2.5 rounded-xl border-2 border-gray-200 text-[#6E6E6E] font-medium text-sm hover:bg-gray-50 cursor-pointer">Cancelar</button>
+                    <button onClick={handleConfirmRoleChange} disabled={confirming || !confirmPasswordValue}
+                        className="px-5 py-2.5 rounded-xl text-white font-medium text-sm hover:shadow-lg cursor-pointer disabled:opacity-50"
+                        style={{ background: 'linear-gradient(135deg, #9B59B6, #6E3A8C)' }}>
+                        {confirming ? 'Verificando...' : 'Confirmar'}
                     </button>
                 </div>
             </Modal>

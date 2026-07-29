@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isTesorero() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/userRoles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/userRoles/$(request.auth.uid)).data.role == 'tesorero';
+    }
+
+    // Ofrendas y diezmos: confidenciales, solo el rol Tesorero puede leerlos
+    // o escribirlos. Ni siquiera el Administrador tiene acceso.
+    match /offerings/{docId} {
+      allow read, write: if isTesorero();
+    }
+    match /tithes/{docId} {
+      allow read, write: if isTesorero();
+    }
+
+    // Espejo uid -> rol usado únicamente por isTesorero() de arriba. Cada
+    // usuario puede leer su propio rol; la escritura la hace la app ya
+    // autenticada (no hay Cloud Function admin dedicada todavía).
+    match /userRoles/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null;
+    }
+
+    // Resto de colecciones (members, users, services, attendances, chats,
+    // avisos, etc.): cualquier usuario autenticado, como hasta ahora.
+    // Se excluyen explícitamente offerings/tithes/userRoles para que esta
+    // regla no las vuelva a abrir por el OR implícito entre reglas.
+    match /{collection}/{docId} {
+      allow read, write: if request.auth != null && !(collection in ['offerings', 'tithes', 'userRoles']);
+    }
+  }
+}

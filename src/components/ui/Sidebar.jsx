@@ -10,7 +10,7 @@ import {
     CalendarDays, LogOut, Shield,
     UserCheck, BookOpen, Sprout, ChevronDown, ChevronRight,
     UserCircle, UserSquare, Baby, Music, Layers, Megaphone, HandHeart, PartyPopper,
-    Menu, X, MessageCircle, Radio, Share2, Check, Facebook, Instagram
+    Menu, X, MessageCircle, Radio, Share2, Check, Facebook, Instagram, Landmark, MessageCircleQuestion
 } from 'lucide-react'
 
 const INSTAGRAM_URL = 'https://www.instagram.com/unrefugioparalafamilia/'
@@ -26,6 +26,7 @@ const NAV_CONFIG = {
         { to: '/admin/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
         { to: '/admin/eventos', icon: PartyPopper, label: 'Eventos' },
         { to: '/admin/chat', icon: MessageCircle, label: 'Chat en Vivo' },
+        { to: '/admin/foro', icon: MessageCircleQuestion, label: 'Foro' },
         { to: '/admin/radio', icon: Radio, label: 'Radio Refugio' },
     ],
     controller: [
@@ -36,6 +37,7 @@ const NAV_CONFIG = {
         { to: '/controller/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
         { to: '/controller/eventos', icon: PartyPopper, label: 'Eventos' },
         { to: '/controller/chat', icon: MessageCircle, label: 'Chat en Vivo' },
+        { to: '/controller/foro', icon: MessageCircleQuestion, label: 'Foro' },
         { to: '/controller/radio', icon: Radio, label: 'Radio Refugio' },
     ],
     attendee: [
@@ -43,7 +45,16 @@ const NAV_CONFIG = {
         { to: '/attendee/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
         { to: '/attendee/eventos', icon: PartyPopper, label: 'Eventos' },
         { to: '/attendee/chat', icon: MessageCircle, label: 'Chat en Vivo' },
+        { to: '/attendee/foro', icon: MessageCircleQuestion, label: 'Foro' },
         { to: '/attendee/radio', icon: Radio, label: 'Radio Refugio' },
+    ],
+    tesorero: [
+        { to: '/tesorero', icon: Landmark, label: 'Finanzas', end: true },
+        { to: '/tesorero/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
+        { to: '/tesorero/eventos', icon: PartyPopper, label: 'Eventos' },
+        { to: '/tesorero/chat', icon: MessageCircle, label: 'Chat en Vivo' },
+        { to: '/tesorero/foro', icon: MessageCircleQuestion, label: 'Foro' },
+        { to: '/tesorero/radio', icon: Radio, label: 'Radio Refugio' },
     ],
 }
 
@@ -51,6 +62,7 @@ const PROFILE_ROUTES = {
     admin: '/admin/profile',
     controller: '/controller/profile',
     attendee: '/attendee/profile',
+    tesorero: '/tesorero/profile',
 }
 
 export default function Sidebar() {
@@ -83,7 +95,7 @@ export default function Sidebar() {
         navigate('/login')
     }
 
-    const roleLabels = { admin: 'Administrador', controller: 'Controlador', attendee: 'Asistente' }
+    const roleLabels = { admin: 'Administrador', controller: 'Controlador', attendee: 'Asistente', tesorero: 'Tesorero' }
 
     return (
         <>

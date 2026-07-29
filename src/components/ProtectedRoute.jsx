@@ -13,7 +13,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     }
 
     if (allowedRoles && !allowedRoles.includes(user.role)) {
-        const defaultRoutes = { admin: '/admin', controller: '/controller', attendee: '/attendee' }
+        const defaultRoutes = { admin: '/admin', controller: '/controller', attendee: '/attendee', tesorero: '/tesorero' }
         return <Navigate to={defaultRoutes[user.role] || '/login'} replace />
     }
 

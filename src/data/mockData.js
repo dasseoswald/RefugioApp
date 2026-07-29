@@ -7,6 +7,11 @@
 import { db } from '../firebase.js'
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch, arrayUnion, query, orderBy, limit } from 'firebase/firestore'
 
+// Cada check acumulado (según cantidad de servicios a los que ha asistido un
+// visitante) corresponde a una acción presencial que el equipo de bienvenida
+// debe realizar: 1=Bienvenida, 2=Folleto, 3=Charla de 5 min, 4=Kit de bienvenida.
+export const WELCOME_CHECK_ACTIONS = ['Bienvenida', 'Folleto', 'Charla de 5 minutos', 'Kit de bienvenida']
+
 export const OPERATIONAL_GROUPS = [
     { id: 'escuela-discipulo', name: 'Escuela del Discípulo', field: 'escuela_discipulo', icon: 'BookOpen' },
     { id: 'buena-tierra', name: 'Buena Tierra', field: 'buena_tierra', icon: 'Sprout' },
@@ -328,6 +333,28 @@ export function cancelAttendance(id, reason) {
     return true
 }
 
+// Visitantes que esta semana (últimos 7 días) alcanzaron un nuevo check de
+// bienvenida (su asistencia N-ésima, donde N es su conteo actual de checks),
+// para que el Controlador sepa a quién le corresponde qué acción presencial.
+export function getVisitorsDueWelcomeThisWeek() {
+    const now = Date.now()
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000
+    return MEMBERS
+        .filter(m => m.member_type === 'Visitante')
+        .map(member => {
+            const attendances = getAttendancesByMember(member.id)
+                .slice()
+                .sort((a, b) => new Date(a.check_in_time) - new Date(b.check_in_time))
+            const checks = Math.min(attendances.length, WELCOME_CHECK_ACTIONS.length)
+            if (checks === 0) return null
+            const achievedAt = attendances[checks - 1].check_in_time
+            if (now - new Date(achievedAt).getTime() > sevenDaysMs) return null
+            return { member, checks, action: WELCOME_CHECK_ACTIONS[checks - 1], achievedAt }
+        })
+        .filter(Boolean)
+        .sort((a, b) => new Date(b.achievedAt) - new Date(a.achievedAt))
+}
+
 export function findAttendanceByMemberAndService(memberId, serviceId) {
     return ATTENDANCES.find(a => a.member_id === memberId && a.service_id === serviceId && !a.is_cancelled) || null
 }
@@ -418,6 +445,56 @@ const radioChat = createChatChannel('radioMessages')
 export const listenToRadioMessages = radioChat.listen
 export const sendRadioMessage = radioChat.send
 
+// ---- Foro abierto (preguntas de la congregación, anónimas o no) ----
+// Igual que los chats en vivo, se sincroniza directo con Firestore para que
+// las preguntas y respuestas aparezcan de inmediato a todos. Las respuestas
+// viven en una colección plana aparte (sin subcolecciones, siguiendo el
+// mismo patrón que el resto de la app) y se filtran por post_id en memoria.
+export function listenToForumPosts(callback) {
+    const q = query(collection(db, 'forumPosts'), orderBy('created_at', 'desc'), limit(200))
+    return onSnapshot(q, (snap) => {
+        callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    }, (err) => console.error('Error sincronizando el foro', err))
+}
+
+export function createForumPost({ content, authorId, authorName, isAnonymous }) {
+    const postsRef = collection(db, 'forumPosts')
+    return setDoc(doc(postsRef), {
+        content,
+        author_id: authorId,
+        author_name: isAnonymous ? null : authorName,
+        is_anonymous: !!isAnonymous,
+        created_at: new Date().toISOString(),
+    }).catch(err => console.error('No se pudo publicar la pregunta', err))
+}
+
+export function deleteForumPost(id) {
+    return deleteDoc(doc(db, 'forumPosts', id)).catch(err => console.error('No se pudo eliminar la pregunta', err))
+}
+
+export function listenToForumReplies(callback) {
+    const q = query(collection(db, 'forumReplies'), orderBy('created_at', 'asc'), limit(500))
+    return onSnapshot(q, (snap) => {
+        callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    }, (err) => console.error('Error sincronizando respuestas del foro', err))
+}
+
+export function createForumReply({ postId, content, authorId, authorName, isAnonymous }) {
+    const repliesRef = collection(db, 'forumReplies')
+    return setDoc(doc(repliesRef), {
+        post_id: postId,
+        content,
+        author_id: authorId,
+        author_name: isAnonymous ? null : authorName,
+        is_anonymous: !!isAnonymous,
+        created_at: new Date().toISOString(),
+    }).catch(err => console.error('No se pudo publicar la respuesta', err))
+}
+
+export function deleteForumReply(id) {
+    return deleteDoc(doc(db, 'forumReplies', id)).catch(err => console.error('No se pudo eliminar la respuesta', err))
+}
+
 // Guarda el token de notificaciones push (FCM) del dispositivo actual en el
 // usuario, para que la función en la nube pueda enviarle notificaciones.
 // Un mismo usuario puede tener varios tokens (uno por dispositivo/navegador).
@@ -438,14 +515,33 @@ export function saveFcmToken(userId, token) {
 // o crea el miembro correspondiente y se genera un usuario nuevo con rol
 // "attendee" por defecto; el administrador puede luego cambiarle el rol
 // desde la sección Usuarios.
-export function createOrGetUserForFirebaseAccount({ email: rawEmail, displayName, photoURL }) {
+// ---- Espejo uid -> rol para las reglas de seguridad de Firestore ----
+// Los documentos de "users" están indexados por un id interno de la app
+// (p. ej. "user-1730..."), no por el uid de Firebase Auth, así que las
+// reglas de seguridad no pueden usar get(/databases/.../users/$(uid)) para
+// saber el rol de quien hace la petición. Por eso mantenemos esta colección
+// aparte, indexada por uid, que solo guarda el rol — la usan las reglas para
+// restringir Finanzas (ofrendas/diezmos) al rol tesorero, sin excepción ni
+// siquiera para administradores.
+function userRoleDocRef(uid) { return doc(db, 'userRoles', uid) }
+
+function syncUserRole(uid, role) {
+    if (!uid) return
+    setDoc(userRoleDocRef(uid), { role }).catch(err => console.error('No se pudo sincronizar el rol de seguridad', err))
+}
+
+export function createOrGetUserForFirebaseAccount({ uid, email: rawEmail, displayName, photoURL }) {
     const email = (rawEmail || '').trim().toLowerCase()
     const existingUser = getUserByEmail(email)
     if (existingUser) {
-        if (photoURL && existingUser.photo_url !== photoURL) {
-            const updated = { ...existingUser, photo_url: photoURL }
+        const patch = {}
+        if (photoURL && existingUser.photo_url !== photoURL) patch.photo_url = photoURL
+        if (uid && existingUser.auth_uid !== uid) patch.auth_uid = uid
+        syncUserRole(uid, existingUser.role)
+        if (Object.keys(patch).length > 0) {
+            const updated = { ...existingUser, ...patch }
             USERS = USERS.map(u => (u.id === existingUser.id ? updated : u))
-            updateDoc(userDocRef(existingUser.id), { photo_url: photoURL }).catch(err => console.error('No se pudo sincronizar el usuario', err))
+            updateDoc(userDocRef(existingUser.id), patch).catch(err => console.error('No se pudo sincronizar el usuario', err))
             return updated
         }
         return { ...existingUser }
@@ -473,10 +569,12 @@ export function createOrGetUserForFirebaseAccount({ email: rawEmail, displayName
         name: displayName || member.full_name,
         member_id: member.id,
         photo_url: photoURL || null,
+        auth_uid: uid || null,
     }
     USERS = [...USERS, newUser]
     const { id, ...rest } = newUser
     setDoc(userDocRef(id), rest).catch(err => console.error('No se pudo guardar el usuario', err))
+    syncUserRole(uid, 'attendee')
     return { ...newUser }
 }
 
@@ -486,6 +584,7 @@ export function updateUserProfile(userId, data) {
     const updated = { ...USERS[index], ...data }
     USERS = USERS.map((u, i) => (i === index ? updated : u))
     updateDoc(userDocRef(userId), data).catch(err => console.error('No se pudo sincronizar el usuario', err))
+    if (data.role && updated.auth_uid) syncUserRole(updated.auth_uid, data.role)
     return { ...updated }
 }
 
@@ -1170,6 +1269,178 @@ export function setEventRegistrationPaymentMethod(registrationId, method) {
     if (!reg) return null
     reg.payment_method = method
     return reg
+}
+
+// ---- Finanzas (Tesorero): ofrendas y diezmos ----
+// Colecciones confidenciales — las reglas de seguridad de Firestore las
+// restringen exclusivamente al rol "tesorero" (ni el administrador puede
+// leerlas). Por eso NO se sincronizan como parte de startCoreDataSync()
+// (que corre para cualquier usuario autenticado): la sincronización solo
+// arranca cuando la propia página de Finanzas la pide (ver
+// subscribeFinanceData), evitando errores de permiso para el resto de roles.
+let OFFERINGS = []
+let TITHES = []
+
+const FINANCE_WINDOW_HOURS = 48
+const FINANCE_WEEKDAY_BY_TYPE = { sunday: 0, thursday: 4 }
+
+function mostRecentServiceDate(weekday, referenceDate = new Date()) {
+    const d = new Date(referenceDate)
+    d.setHours(0, 0, 0, 0)
+    const diff = (d.getDay() - weekday + 7) % 7
+    d.setDate(d.getDate() - diff)
+    return d
+}
+
+function financeWindowFor(serviceType, serviceDate) {
+    const closesAt = new Date(serviceDate.getTime() + FINANCE_WINDOW_HOURS * 60 * 60 * 1000)
+    return {
+        service_type: serviceType,
+        service_date: serviceDate.toISOString().split('T')[0],
+        closes_at: closesAt.toISOString(),
+        is_active: new Date() < closesAt,
+    }
+}
+
+// Ventanas de registro actualmente abiertas (dentro de las 48 hrs desde la
+// fecha del servicio). Puede haber 0, 1 o 2 (domingo y jueves a la vez).
+export function getActiveFinanceWindows() {
+    return Object.entries(FINANCE_WEEKDAY_BY_TYPE)
+        .map(([serviceType, weekday]) => financeWindowFor(serviceType, mostRecentServiceDate(weekday)))
+        .filter(w => w.is_active)
+}
+
+// Últimas `countPerType` ventanas (activas + historial reciente) de cada
+// tipo de servicio, para que el tesorero pueda revisar/completar registros
+// recientes aunque la ventana de 48 hrs ya haya cerrado.
+export function getRecentFinanceWindows(countPerType = 6) {
+    const windows = []
+    Object.entries(FINANCE_WEEKDAY_BY_TYPE).forEach(([serviceType, weekday]) => {
+        let serviceDate = mostRecentServiceDate(weekday)
+        for (let i = 0; i < countPerType; i++) {
+            windows.push(financeWindowFor(serviceType, serviceDate))
+            serviceDate = new Date(serviceDate)
+            serviceDate.setDate(serviceDate.getDate() - 7)
+        }
+    })
+    return windows.sort((a, b) => new Date(b.service_date) - new Date(a.service_date))
+}
+
+function offeringDocId(serviceType, serviceDate) { return `${serviceType}-${serviceDate}` }
+function offeringDocRef(serviceType, serviceDate) { return doc(db, 'offerings', offeringDocId(serviceType, serviceDate)) }
+function titheDocRef(id) { return doc(db, 'tithes', id) }
+
+export function getOfferings() { return [...OFFERINGS] }
+
+export function getOffering(serviceType, serviceDate) {
+    return OFFERINGS.find(o => o.service_type === serviceType && o.service_date === serviceDate) || null
+}
+
+export function upsertOffering(serviceType, serviceDate, amount, notes, userId) {
+    const id = offeringDocId(serviceType, serviceDate)
+    const existingIndex = OFFERINGS.findIndex(o => o.id === id)
+    const record = {
+        id,
+        service_type: serviceType,
+        service_date: serviceDate,
+        amount: Number(amount) || 0,
+        notes: notes || null,
+        registered_by: userId,
+        updated_at: new Date().toISOString(),
+    }
+    OFFERINGS = existingIndex === -1 ? [...OFFERINGS, record] : OFFERINGS.map((o, i) => (i === existingIndex ? record : o))
+    const { id: _id, ...rest } = record
+    setDoc(offeringDocRef(serviceType, serviceDate), rest).catch(err => console.error('No se pudo guardar la ofrenda', err))
+    notifyFinanceListeners()
+    return record
+}
+
+export function getTithes() { return [...TITHES] }
+
+export function getTithesForServiceDate(serviceType, serviceDate) {
+    return TITHES.filter(t => t.service_type === serviceType && t.service_date === serviceDate)
+}
+
+export function getTitheForMember(serviceType, serviceDate, memberId) {
+    return TITHES.find(t => t.service_type === serviceType && t.service_date === serviceDate && t.member_id === memberId) || null
+}
+
+// Marca (o desmarca, si amount es 0/vacío) el diezmo de un miembro para un
+// servicio puntual. El tesorero elige quiénes diezmaron y con qué monto.
+export function setTitheForMember(serviceType, serviceDate, memberId, amount, userId) {
+    const existing = getTitheForMember(serviceType, serviceDate, memberId)
+    if (!amount || Number(amount) <= 0) {
+        if (existing) removeTithe(existing.id)
+        return null
+    }
+    if (existing) {
+        const updated = { ...existing, amount: Number(amount), registered_by: userId, updated_at: new Date().toISOString() }
+        TITHES = TITHES.map(t => (t.id === existing.id ? updated : t))
+        updateDoc(titheDocRef(existing.id), { amount: updated.amount, registered_by: userId, updated_at: updated.updated_at })
+            .catch(err => console.error('No se pudo actualizar el diezmo', err))
+        notifyFinanceListeners()
+        return updated
+    }
+    const id = `tithe-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    const record = {
+        id,
+        service_type: serviceType,
+        service_date: serviceDate,
+        member_id: memberId,
+        amount: Number(amount),
+        registered_by: userId,
+        created_at: new Date().toISOString(),
+    }
+    TITHES = [...TITHES, record]
+    const { id: _id, ...rest } = record
+    setDoc(titheDocRef(id), rest).catch(err => console.error('No se pudo guardar el diezmo', err))
+    notifyFinanceListeners()
+    return record
+}
+
+export function removeTithe(id) {
+    TITHES = TITHES.filter(t => t.id !== id)
+    deleteDoc(titheDocRef(id)).catch(err => console.error('No se pudo eliminar el diezmo', err))
+    notifyFinanceListeners()
+}
+
+let financeListeners = []
+let financeSyncStarted = false
+let financeLoaded = false
+
+function notifyFinanceListeners() { financeListeners.forEach(fn => fn()) }
+
+export function isFinanceDataLoaded() { return financeLoaded }
+
+function startFinanceSync() {
+    if (financeSyncStarted) return
+    financeSyncStarted = true
+    let offeringsLoaded = false
+    let tithesLoaded = false
+    const checkLoaded = () => {
+        if (offeringsLoaded && tithesLoaded) financeLoaded = true
+        notifyFinanceListeners()
+    }
+    onSnapshot(collection(db, 'offerings'), (snap) => {
+        OFFERINGS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        offeringsLoaded = true
+        checkLoaded()
+    }, (err) => { console.error('Error sincronizando ofrendas', err); offeringsLoaded = true; checkLoaded() })
+    onSnapshot(collection(db, 'tithes'), (snap) => {
+        TITHES = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        tithesLoaded = true
+        checkLoaded()
+    }, (err) => { console.error('Error sincronizando diezmos', err); tithesLoaded = true; checkLoaded() })
+}
+
+// Punto de entrada único para la página de Finanzas: arranca la
+// sincronización (solo la primera vez) y registra un callback para
+// re-renderizar cuando lleguen datos nuevos. Devuelve una función para
+// des-suscribirse al desmontar el componente.
+export function subscribeFinanceData(callback) {
+    financeListeners.push(callback)
+    startFinanceSync()
+    return () => { financeListeners = financeListeners.filter(fn => fn !== callback) }
 }
 
 // ---- Persistencia en localStorage ----

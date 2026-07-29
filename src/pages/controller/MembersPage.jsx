@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { getMembers, createMember, updateMember, toggleMemberActive, getAttendancesByMember, getMemberRefugio, OPERATIONAL_GROUPS } from '../../data/mockData.js'
+import { getMembers, createMember, updateMember, toggleMemberActive, getAttendancesByMember, getMemberRefugio, OPERATIONAL_GROUPS, WELCOME_CHECK_ACTIONS } from '../../data/mockData.js'
 import Modal from '../../components/ui/Modal.jsx'
-import { Search, UserPlus, Edit2, ToggleLeft, ToggleRight, Users, Filter, ChevronLeft, ChevronRight, FileUser, Home, X } from 'lucide-react'
+import { Search, UserPlus, Edit2, ToggleLeft, ToggleRight, Users, Filter, ChevronLeft, ChevronRight, FileUser, Home, X, CheckCircle2, Circle } from 'lucide-react'
 
 const MEMBER_TYPES = ['Miembro Activo', 'Miembro Inactivo', 'Visitante', 'Servidor', 'Líder', 'Pastor']
 const CIVIL_STATUSES = ['Soltero', 'Casado', 'Viudo', 'Divorciado']
@@ -124,7 +124,9 @@ export default function MembersPage({ canToggleActive = false }) {
                                 <th className="text-left px-6 py-3 text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider">Miembro</th>
                                 <th className="text-left px-6 py-3 text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider hidden md:table-cell">Tipo</th>
                                 <th className="text-left px-6 py-3 text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider hidden lg:table-cell">Teléfono</th>
-                                <th className="text-left px-6 py-3 text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider hidden lg:table-cell">Refugio Designado</th>
+                                <th className="text-left px-6 py-3 text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider hidden lg:table-cell">
+                                    {filterType === 'Visitante' ? 'Seguimiento de Bienvenida' : 'Refugio Designado'}
+                                </th>
                                 <th className="text-left px-6 py-3 text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider">Estado</th>
                                 <th className="text-right px-6 py-3 text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider">Acciones</th>
                             </tr>
@@ -152,7 +154,25 @@ export default function MembersPage({ canToggleActive = false }) {
                                         </td>
                                         <td className="px-6 py-4 hidden lg:table-cell text-sm text-[#111111]">{member.phone || '—'}</td>
                                         <td className="px-6 py-4 hidden lg:table-cell text-sm">
-                                            {memberRefugio ? (
+                                            {filterType === 'Visitante' ? (
+                                                (() => {
+                                                    const checks = Math.min(attendanceCount, WELCOME_CHECK_ACTIONS.length)
+                                                    return (
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="flex items-center gap-0.5">
+                                                                {WELCOME_CHECK_ACTIONS.map((_, i) => (
+                                                                    i < checks
+                                                                        ? <CheckCircle2 key={i} className="w-4 h-4 text-[#13CD68]" />
+                                                                        : <Circle key={i} className="w-4 h-4 text-gray-200" />
+                                                                ))}
+                                                            </div>
+                                                            <span className="text-xs text-[#6E6E6E]">
+                                                                {checks > 0 ? `Corresponde: ${WELCOME_CHECK_ACTIONS[checks - 1]}` : 'Aún sin asistencias'}
+                                                            </span>
+                                                        </div>
+                                                    )
+                                                })()
+                                            ) : memberRefugio ? (
                                                 <div className="flex items-center gap-1.5 text-[#111111]">
                                                     <Home className="w-3.5 h-3.5 text-[#6E6E6E] flex-shrink-0" />
                                                     <span className="font-medium">{memberRefugio.refugio.name}</span>
