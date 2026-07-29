@@ -20,3 +20,8 @@ messaging.onBackgroundMessage((payload) => {
         badge: '/icon-192.png',
     })
 })
+
+// Requerido para que el navegador considere la app instalable como PWA.
+self.addEventListener('install', () => self.skipWaiting())
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()))
+self.addEventListener('fetch', () => {})

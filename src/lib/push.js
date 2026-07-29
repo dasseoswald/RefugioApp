@@ -6,6 +6,17 @@ import { saveFcmToken } from '../data/mockData.js'
 // > "Certificados push web" > Generar par de claves.
 const VAPID_KEY = 'BC0XiGn-0ebklP7H5TrnzGHWoaNrvK5TeOf4DLz6P9SHQKOsnX13RBbzIjlY75mdW8aIoyj6ACHC7aerdNS6Vl4'
 
+// Se registra una sola vez al arrancar la app (ver main.jsx), tanto para
+// habilitar la instalación como PWA como para tener el service worker listo
+// antes de que el usuario decida activar las notificaciones.
+export function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return Promise.resolve(null)
+    return navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(err => {
+        console.error('No se pudo registrar el service worker', err)
+        return null
+    })
+}
+
 export async function enablePushNotifications(userId) {
     if (!('Notification' in window) || !(await isSupported().catch(() => false))) {
         return { error: 'Este navegador no soporta notificaciones push' }
@@ -17,7 +28,7 @@ export async function enablePushNotifications(userId) {
     }
 
     try {
-        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js')
+        const registration = await registerServiceWorker() || await navigator.serviceWorker.register('/firebase-messaging-sw.js')
         const messaging = getMessaging(app)
         const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: registration })
         if (!token) return { error: 'No se pudo generar el token de notificaciones' }
