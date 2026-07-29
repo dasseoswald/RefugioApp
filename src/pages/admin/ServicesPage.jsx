@@ -5,16 +5,23 @@ import ServiceAttendanceModal from '../../components/admin/ServiceAttendanceModa
 import { CalendarDays, Plus, Edit2, Power, PowerOff, Users, ClipboardCheck, History, CalendarCheck, HandHeart, Heart, Send } from 'lucide-react'
 import { getAttendancesByService } from '../../data/mockData.js'
 
-function getCurrentWeekSunday() {
+// weekday: 0=domingo ... 4=jueves. Devuelve la fecha (YYYY-MM-DD) de ese día
+// en la semana actual (si ya pasó esta semana, avanza a la próxima).
+function getCurrentWeekDate(weekday) {
     const today = new Date()
-    const day = today.getDay() // 0 = domingo ... 6 = sábado
-    const diff = day === 0 ? 0 : 7 - day
-    const sunday = new Date(today)
-    sunday.setDate(today.getDate() + diff)
-    const y = sunday.getFullYear()
-    const m = String(sunday.getMonth() + 1).padStart(2, '0')
-    const d = String(sunday.getDate()).padStart(2, '0')
+    const day = today.getDay()
+    const diff = (weekday - day + 7) % 7
+    const target = new Date(today)
+    target.setDate(today.getDate() + diff)
+    const y = target.getFullYear()
+    const m = String(target.getMonth() + 1).padStart(2, '0')
+    const d = String(target.getDate()).padStart(2, '0')
     return `${y}-${m}-${d}`
+}
+
+const SERVICE_TYPES = {
+    sunday: { label: 'Domingo', weekday: 0, defaultName: 'Servicio Dominical', starts_at: '07:00', ends_at: '13:00' },
+    thursday: { label: 'Jueves', weekday: 4, defaultName: 'Servicio de Jueves', starts_at: '20:00', ends_at: '22:00' },
 }
 
 export default function ServicesPage() {
@@ -24,28 +31,31 @@ export default function ServicesPage() {
     const [selectedService, setSelectedService] = useState(null)
     const [editing, setEditing] = useState(null)
     const [showAll, setShowAll] = useState(false)
-    const [form, setForm] = useState({ name: '', service_date: '', pastor_name: '', starts_at: '07:00', ends_at: '13:00' })
+    const [activeType, setActiveType] = useState('sunday')
+    const [form, setForm] = useState({ name: '', service_date: '', service_type: 'sunday', pastor_name: '', starts_at: '07:00', ends_at: '13:00' })
     const [prayerService, setPrayerService] = useState(null)
     const [prayerForm, setPrayerForm] = useState({ author_name: '', type: 'oracion', content: '' })
 
-    const currentWeekSunday = getCurrentWeekSunday()
+    const currentWeekDate = getCurrentWeekDate(SERVICE_TYPES[activeType].weekday)
 
     useEffect(() => { refreshServices() }, [])
 
     const refreshServices = () => setServices(getServices())
 
-    const visibleServices = showAll ? services : services.filter(s => s.service_date === currentWeekSunday)
-    const thisWeekService = services.find(s => s.service_date === currentWeekSunday)
+    const servicesOfType = services.filter(s => (s.service_type || 'sunday') === activeType)
+    const visibleServices = showAll ? servicesOfType : servicesOfType.filter(s => s.service_date === currentWeekDate)
+    const thisWeekService = servicesOfType.find(s => s.service_date === currentWeekDate)
 
     const openCreate = () => {
         setEditing(null)
-        setForm({ name: 'Servicio Dominical', service_date: currentWeekSunday, pastor_name: '', starts_at: '07:00', ends_at: '13:00' })
+        const preset = SERVICE_TYPES[activeType]
+        setForm({ name: preset.defaultName, service_date: currentWeekDate, service_type: activeType, pastor_name: '', starts_at: preset.starts_at, ends_at: preset.ends_at })
         setIsModalOpen(true)
     }
 
     const openEdit = (service) => {
         setEditing(service)
-        setForm({ name: service.name, service_date: service.service_date, pastor_name: service.pastor_name || '', starts_at: service.starts_at, ends_at: service.ends_at })
+        setForm({ name: service.name, service_date: service.service_date, service_type: service.service_type || 'sunday', pastor_name: service.pastor_name || '', starts_at: service.starts_at, ends_at: service.ends_at })
         setIsModalOpen(true)
     }
 
@@ -99,7 +109,7 @@ export default function ServicesPage() {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-[#111111]">Servicios Dominicales</h1>
+                    <h1 className="text-2xl font-bold text-[#111111]">Servicios</h1>
                     <p className="text-[#6E6E6E] mt-1">{showAll ? 'Historial completo de servicios' : 'Servicio de esta semana'}</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -116,11 +126,22 @@ export default function ServicesPage() {
                 </div>
             </div>
 
+            {/* Tipo de servicio */}
+            <div className="flex items-center gap-2 border-b border-gray-200">
+                {Object.entries(SERVICE_TYPES).map(([type, cfg]) => (
+                    <button key={type} onClick={() => setActiveType(type)}
+                        className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeType === type ? 'border-[#2696D2] text-[#111111]' : 'border-transparent text-[#6E6E6E] hover:text-[#111111]'
+                            }`}>
+                        {cfg.label}
+                    </button>
+                ))}
+            </div>
+
             {!showAll && !thisWeekService && (
                 <div className="bg-white rounded-2xl p-10 text-center shadow-[0_2px_12px_rgba(38,150,210,0.08)]">
                     <CalendarDays className="w-12 h-12 mx-auto mb-3 text-[#6E6E6E]/20" />
-                    <p className="text-lg font-medium text-[#111111]">Aún no hay un servicio creado para esta semana</p>
-                    <p className="text-sm text-[#6E6E6E] mb-4">{formatDate(currentWeekSunday)}</p>
+                    <p className="text-lg font-medium text-[#111111]">Aún no hay un servicio de {SERVICE_TYPES[activeType].label.toLowerCase()} creado para esta semana</p>
+                    <p className="text-sm text-[#6E6E6E] mb-4">{formatDate(currentWeekDate)}</p>
                     <button onClick={openCreate}
                         className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-medium text-sm transition-all hover:shadow-lg cursor-pointer"
                         style={{ background: 'linear-gradient(135deg, #2696D2, #1D74A8)' }}>
@@ -192,6 +213,26 @@ export default function ServicesPage() {
 
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editing ? 'Editar Servicio' : 'Nuevo Servicio'}>
                 <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-[#111111] mb-1.5">Tipo de Servicio *</label>
+                        <div className="flex items-center gap-2">
+                            {Object.entries(SERVICE_TYPES).map(([type, cfg]) => (
+                                <button key={type} type="button"
+                                    onClick={() => setForm(f => ({
+                                        ...f,
+                                        service_type: type,
+                                        name: (!editing && (f.name === '' || f.name === SERVICE_TYPES[f.service_type]?.defaultName)) ? cfg.defaultName : f.name,
+                                        starts_at: !editing ? cfg.starts_at : f.starts_at,
+                                        ends_at: !editing ? cfg.ends_at : f.ends_at,
+                                        service_date: !editing ? getCurrentWeekDate(cfg.weekday) : f.service_date,
+                                    }))}
+                                    className={`px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all cursor-pointer ${form.service_type === type ? 'text-white border-transparent' : 'border-gray-200 text-[#6E6E6E]'
+                                        }`} style={form.service_type === type ? { background: '#2696D2' } : {}}>
+                                    {cfg.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                     <div>
                         <label className="block text-sm font-medium text-[#111111] mb-1.5">Nombre del Servicio *</label>
                         <input type="text" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}

@@ -56,6 +56,10 @@ export default function BroadcastPage() {
             author_id: user?.id,
             media_url: mediaBase64,
             media_type: mediaType,
+            // Si se envió a todos los grupos, se marca como mensaje general
+            // para que también llegue a quienes no tienen ningún ministerio
+            // asignado (ver getNoticesForMember).
+            audience: allSelected ? 'all' : null,
         })
 
         setNotification({ type: 'success', message: `Aviso enviado a ${selectedGroups.length} grupo${selectedGroups.length === 1 ? '' : 's'} exitosamente` })

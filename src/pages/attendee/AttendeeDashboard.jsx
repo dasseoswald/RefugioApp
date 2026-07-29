@@ -5,6 +5,8 @@ import {
     getMemberEscuelaProgress, ESCUELA_GUIDE_URLS
 } from '../../data/mockData.js'
 import { CheckCircle2, Clock, CalendarDays, UserCheck, Church, History, Sparkles, GraduationCap, FileText } from 'lucide-react'
+import NovedadesCarousel from '../../components/shared/NovedadesCarousel.jsx'
+import NextEventBanner from '../../components/shared/NextEventBanner.jsx'
 
 const LEVEL_NAMES = { 1: 'Nivel 1', 2: 'Nivel 2', 3: 'Nivel 3' }
 
@@ -78,6 +80,9 @@ export default function AttendeeDashboard() {
                     )}
                 </div>
             </div>
+
+            <NextEventBanner />
+            <NovedadesCarousel />
 
             {/* Registration button / Confirmation */}
             {showConfirmation ? (

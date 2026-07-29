@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { getActiveService, getAttendancesByService, getMembers, getMemberById } from '../../data/mockData.js'
 import StatsCard from '../../components/ui/StatsCard.jsx'
 import { Users, UserCheck, Clock, Fingerprint, Eye, CalendarDays } from 'lucide-react'
+import NovedadesCarousel from '../../components/shared/NovedadesCarousel.jsx'
+import NextEventBanner from '../../components/shared/NextEventBanner.jsx'
 
 export default function ControllerDashboard() {
     const [activeService, setActiveService] = useState(null)
@@ -38,6 +40,9 @@ export default function ControllerDashboard() {
                     </p>
                 )}
             </div>
+
+            <NextEventBanner />
+            <NovedadesCarousel />
 
             {/* KPIs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">

@@ -83,6 +83,7 @@ const SERVICES = pastSundays.map((date, index) => ({
     id: `svc-${index + 1}`,
     name: index === 0 ? 'Servicio Dominical' : `Servicio Dominical`,
     service_date: date.toISOString().split('T')[0],
+    service_type: 'sunday',
     pastor_name: index % 3 === 0 ? 'Pastora Lucía Ramírez' : index % 3 === 1 ? 'Pastor Miguel Ángel' : 'Pastor David Hernández',
     starts_at: '07:00',
     ends_at: '13:00',
@@ -224,10 +225,23 @@ export function toggleMemberActive(id) {
 
 export function getServices() { return [...SERVICES] }
 
-export function getActiveService() { return SERVICES.find(s => s.is_active) || SERVICES[0] }
+// Cada tipo de servicio (domingo, jueves) tiene su propio servicio "activo",
+// independiente del otro. Si no se pide un tipo puntual, se adivina según el
+// día de hoy (domingo=0, jueves=4); fuera de esos días, cae al comportamiento
+// anterior (cualquier servicio activo).
+export function getActiveService(type) {
+    if (type) return SERVICES.find(s => s.is_active && s.service_type === type) || null
+    const day = new Date().getDay()
+    const expectedType = day === 0 ? 'sunday' : day === 4 ? 'thursday' : null
+    if (expectedType) {
+        const match = SERVICES.find(s => s.is_active && s.service_type === expectedType)
+        if (match) return match
+    }
+    return SERVICES.find(s => s.is_active) || SERVICES[0]
+}
 
 export function createService(data) {
-    const newService = { ...data, id: `svc-${SERVICES.length + 1}`, is_active: false, created_at: new Date().toISOString() }
+    const newService = { service_type: 'sunday', ...data, id: `svc-${Date.now()}-${Math.floor(Math.random() * 1000)}`, is_active: false, created_at: new Date().toISOString() }
     SERVICES.push(newService)
     return newService
 }
@@ -239,23 +253,18 @@ export function updateService(id, data) {
     return SERVICES[index]
 }
 
+// Activar un servicio solo desactiva otros de su MISMO tipo — un domingo
+// activo y un jueves activo pueden coexistir sin pisarse.
 export function toggleServiceActive(id) {
-    SERVICES.forEach(s => { s.is_active = (s.id === id) ? !s.is_active : false })
+    const target = SERVICES.find(s => s.id === id)
+    if (!target) return null
+    const nextActive = !target.is_active
+    SERVICES.forEach(s => {
+        if (s.service_type === target.service_type) {
+            s.is_active = (s.id === id) ? nextActive : false
+        }
+    })
     return SERVICES.find(s => s.id === id)
-}
-
-export function activateTodaySundayService() {
-    const today = new Date()
-    if (today.getDay() !== 0) return { activated: false, reason: 'not_sunday', service: null }
-
-    const todayStr = today.toISOString().split('T')[0]
-    const todayService = SERVICES.find(s => s.service_date === todayStr)
-    if (!todayService) return { activated: false, reason: 'no_service_found', service: null }
-    if (todayService.is_active) return { activated: false, reason: 'already_active', service: todayService }
-
-    SERVICES.forEach(s => { s.is_active = false })
-    todayService.is_active = true
-    return { activated: true, reason: 'activated', service: todayService }
 }
 
 export function getAttendances() { return [...ATTENDANCES] }
@@ -914,6 +923,19 @@ export function getGroupNotices(groupId) {
 
 export function broadcastNoticeToGroups(groupIds, data) {
     return groupIds.map(groupId => createGroupNotice({ ...data, group_id: groupId }))
+}
+
+// Avisos relevantes para un miembro: los de sus propios ministerios, más los
+// mensajes generales (audience: 'all', enviados a todos los grupos a la vez)
+// — así también le llegan a quien todavía no está en ningún grupo.
+export function getNoticesForMember(member, limit = 10) {
+    const memberGroupIds = member
+        ? OPERATIONAL_GROUPS.filter(g => member[g.field]).map(g => g.id)
+        : []
+    return GROUP_NOTICES
+        .filter(n => n.audience === 'all' || memberGroupIds.includes(n.group_id))
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, limit)
 }
 
 export function createGroupNotice(data) {
