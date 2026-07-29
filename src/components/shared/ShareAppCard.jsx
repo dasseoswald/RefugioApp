@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Share2, Facebook, Instagram, Check } from 'lucide-react'
+import { shareApp } from '../../lib/shareApp.js'
 
 const INSTAGRAM_URL = 'https://www.instagram.com/unrefugioparalafamilia/'
 const FACEBOOK_URL = 'https://www.facebook.com/unrefugioparalafamilia'
@@ -8,28 +9,10 @@ export default function ShareAppCard() {
     const [copied, setCopied] = useState(false)
 
     const handleShare = async () => {
-        const appUrl = window.location.origin
-        const shareData = {
-            title: 'Refugio App',
-            text: 'Únete a Refugio App, la app de nuestra iglesia',
-            url: appUrl,
-        }
-        if (navigator.share) {
-            try {
-                await navigator.share(shareData)
-            } catch {
-                // El usuario canceló el cuadro de compartir, no hay nada que hacer.
-            }
-            return
-        }
-        try {
-            await navigator.clipboard.writeText(appUrl)
+        const result = await shareApp()
+        if (result.copied) {
             setCopied(true)
             setTimeout(() => setCopied(false), 2000)
-        } catch {
-            // Último recurso si el portapapeles también falla: mostrar el
-            // link para copiarlo a mano, en vez de fallar en silencio.
-            window.prompt('Copia este link para compartirlo:', appUrl)
         }
     }
 

@@ -2,6 +2,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { OPERATIONAL_GROUPS, getMemberById } from '../../data/mockData.js'
+import { shareApp } from '../../lib/shareApp.js'
 import UserAvatar from './UserAvatar.jsx'
 import logo from '../../assets/logo.png'
 import {
@@ -9,7 +10,7 @@ import {
     CalendarDays, LogOut, Shield,
     UserCheck, BookOpen, Sprout, ChevronDown, ChevronRight,
     UserCircle, UserSquare, Baby, Music, Layers, Megaphone, HandHeart, PartyPopper,
-    Menu, X, MessageCircle, Radio
+    Menu, X, MessageCircle, Radio, Share2, Check
 } from 'lucide-react'
 
 const NAV_CONFIG = {
@@ -58,6 +59,15 @@ export default function Sidebar() {
     const isProfileActive = location.pathname === profileRoute
     const [groupsOpen, setGroupsOpen] = useState(true)
     const [mobileOpen, setMobileOpen] = useState(false)
+    const [shareCopied, setShareCopied] = useState(false)
+
+    const handleShareApp = async () => {
+        const result = await shareApp()
+        if (result.copied) {
+            setShareCopied(true)
+            setTimeout(() => setShareCopied(false), 2000)
+        }
+    }
 
     // Determinar los grupos permitidos
     const myMember = user?.member_id ? getMemberById(user.member_id) : null
@@ -220,6 +230,13 @@ export default function Sidebar() {
                         <span>Configuración</span>
                     </NavLink>
                 )}
+                <button
+                    onClick={handleShareApp}
+                    className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all duration-200 cursor-pointer"
+                >
+                    {shareCopied ? <Check className="w-5 h-5" /> : <Share2 className="w-5 h-5" />}
+                    <span>{shareCopied ? 'Link copiado' : 'Compartir App'}</span>
+                </button>
                 <button
                     onClick={handleLogout}
                     className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all duration-200 cursor-pointer"
