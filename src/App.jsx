@@ -1,5 +1,7 @@
+import { useState, useEffect, useRef } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext.jsx'
+import logo from './assets/logo.png'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import Sidebar from './components/ui/Sidebar.jsx'
 import LoginPage from './pages/LoginPage.jsx'
@@ -42,16 +44,42 @@ function AppLayout({ children }) {
 }
 
 const DEFAULT_ROUTES = { admin: '/admin', controller: '/controller', tesorero: '/tesorero', attendee: '/attendee' }
+const SPLASH_DURATION_MS = 2000
+
+function SplashScreen() {
+    return (
+        <div className="min-h-screen flex items-center justify-center animate-fade-in"
+            style={{ background: 'linear-gradient(180deg, #010101 0%, #111111 100%)' }}>
+            <img src={logo} alt="Refugio App" className="w-28 h-28 object-contain" />
+        </div>
+    )
+}
 
 export default function App() {
     const { isAuthenticated, user, loading } = useAuth()
+    const [minSplashDone, setMinSplashDone] = useState(false)
+    const [postLoginSplash, setPostLoginSplash] = useState(false)
+    const wasAuthenticated = useRef(isAuthenticated)
 
-    if (loading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-[#111111]">
-                <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
-            </div>
-        )
+    // Splash mínimo al cargar la app (antes de mostrar login o dashboard)
+    useEffect(() => {
+        const timer = setTimeout(() => setMinSplashDone(true), SPLASH_DURATION_MS)
+        return () => clearTimeout(timer)
+    }, [])
+
+    // Splash al pasar de no-autenticado a autenticado (login recién hecho)
+    useEffect(() => {
+        if (isAuthenticated && !wasAuthenticated.current) {
+            setPostLoginSplash(true)
+            const timer = setTimeout(() => setPostLoginSplash(false), SPLASH_DURATION_MS)
+            wasAuthenticated.current = isAuthenticated
+            return () => clearTimeout(timer)
+        }
+        wasAuthenticated.current = isAuthenticated
+    }, [isAuthenticated])
+
+    if (loading || !minSplashDone || postLoginSplash) {
+        return <SplashScreen />
     }
 
     return (
