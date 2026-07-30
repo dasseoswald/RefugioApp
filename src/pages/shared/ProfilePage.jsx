@@ -10,6 +10,7 @@ import ShareAppCard from '../../components/shared/ShareAppCard.jsx'
 import {
     Camera, Save, CheckCircle2, AlertCircle, Mail, Shield, User, Cake, Heart, Phone, UserCheck,
     MapPin, Briefcase, Church, Users as UsersIcon, Droplets, AlertTriangle, Calendar, Bell, BellRing,
+    Edit2, Check, X,
 } from 'lucide-react'
 
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 // 2MB
@@ -57,6 +58,9 @@ export default function ProfilePage() {
     const [savingLife, setSavingLife] = useState(false)
     const [notifPermission, setNotifPermission] = useState('default')
     const [enablingNotifs, setEnablingNotifs] = useState(false)
+    const [editingName, setEditingName] = useState(false)
+    const [nameInput, setNameInput] = useState('')
+    const [savingName, setSavingName] = useState(false)
 
     useEffect(() => {
         if (!user?.member_id) return
@@ -88,6 +92,10 @@ export default function ProfilePage() {
     useEffect(() => {
         setNotifPermission(getNotificationPermission())
     }, [])
+
+    useEffect(() => {
+        if (user?.name && !editingName) setNameInput(user.name)
+    }, [user?.name, editingName])
 
     if (!user) return null
 
@@ -179,6 +187,39 @@ export default function ProfilePage() {
         }, 400)
     }
 
+    const handleStartEditName = () => {
+        setNameInput(user.name)
+        setEditingName(true)
+    }
+
+    const handleCancelEditName = () => {
+        setNameInput(user.name)
+        setEditingName(false)
+    }
+
+    const handleSaveName = () => {
+        const trimmed = nameInput.trim()
+        if (!trimmed) {
+            showToast('El nombre no puede estar vacío', 'error')
+            return
+        }
+        if (trimmed === user.name) {
+            setEditingName(false)
+            return
+        }
+        setSavingName(true)
+        setTimeout(() => {
+            const result = updateProfile({ name: trimmed })
+            setSavingName(false)
+            if (result.error) {
+                showToast(result.error, 'error')
+                return
+            }
+            setEditingName(false)
+            showToast('Nombre actualizado correctamente')
+        }, 300)
+    }
+
     const handleRemovePhoto = () => {
         const result = updateProfile({ photo_url: null })
         setPreviewUrl(null)
@@ -263,14 +304,56 @@ export default function ProfilePage() {
                     </div>
                 </div>
 
-                {/* User info (read only) */}
+                {/* User info (nombre editable, correo y rol de solo lectura) */}
                 <div className="p-6 space-y-4">
                     <div className="flex items-center gap-3 p-4 rounded-xl bg-gray-50/80">
                         <User className="w-5 h-5 text-[#6E6E6E] flex-shrink-0" />
-                        <div>
+                        <div className="flex-1 min-w-0">
                             <p className="text-xs text-[#6E6E6E] font-medium">Nombre</p>
-                            <p className="text-sm text-[#111111] font-semibold">{user.name}</p>
+                            {editingName ? (
+                                <div className="flex items-center gap-2 mt-1">
+                                    <input
+                                        type="text"
+                                        value={nameInput}
+                                        onChange={(e) => setNameInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') handleSaveName()
+                                            if (e.key === 'Escape') handleCancelEditName()
+                                        }}
+                                        autoFocus
+                                        disabled={savingName}
+                                        className="flex-1 min-w-0 px-3 py-1.5 rounded-lg border-2 border-gray-200 bg-white text-sm text-[#111111] focus:outline-none focus:border-[#2696D2] disabled:opacity-60"
+                                    />
+                                    <button
+                                        onClick={handleSaveName}
+                                        disabled={savingName || !nameInput.trim()}
+                                        className="p-1.5 rounded-lg text-[#13CD68] hover:bg-[#E1F9EC] disabled:opacity-40 cursor-pointer flex-shrink-0"
+                                        aria-label="Guardar nombre"
+                                    >
+                                        <Check className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        onClick={handleCancelEditName}
+                                        disabled={savingName}
+                                        className="p-1.5 rounded-lg text-[#6E6E6E] hover:bg-gray-100 disabled:opacity-40 cursor-pointer flex-shrink-0"
+                                        aria-label="Cancelar edición"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ) : (
+                                <p className="text-sm text-[#111111] font-semibold">{user.name}</p>
+                            )}
                         </div>
+                        {!editingName && (
+                            <button
+                                onClick={handleStartEditName}
+                                className="p-2 rounded-lg text-[#2696D2] hover:bg-[#E8F4FC] cursor-pointer flex-shrink-0"
+                                aria-label="Editar nombre"
+                            >
+                                <Edit2 className="w-4 h-4" />
+                            </button>
+                        )}
                     </div>
                     <div className="flex items-center gap-3 p-4 rounded-xl bg-gray-50/80">
                         <Mail className="w-5 h-5 text-[#6E6E6E] flex-shrink-0" />
