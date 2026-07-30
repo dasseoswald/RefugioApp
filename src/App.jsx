@@ -34,7 +34,7 @@ function AppLayout({ children }) {
     return (
         <div className="min-h-screen bg-[#EDEDED]">
             <Sidebar />
-            <main className="min-h-screen p-4 pt-20 lg:ml-64 lg:p-8">
+            <main className="min-h-screen p-4 pt-[calc(5rem_+_env(safe-area-inset-top))] lg:ml-64 lg:p-8">
                 {children}
             </main>
             <SetPasswordPrompt />

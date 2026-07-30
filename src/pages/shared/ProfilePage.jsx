@@ -15,6 +15,11 @@ import {
 
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 // 2MB
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+// Firestore limita cada documento a 1MiB. La foto se guarda como base64 dentro
+// del documento del usuario (junto a otros campos), así que la comprimimos muy
+// por debajo de ese límite; si no, updateDoc falla en silencio (solo se loguea
+// el error) y la foto "no se guarda" en el próximo refresh.
+const MAX_STORED_PHOTO_BYTES = 400 * 1024
 const GENDERS = ['M', 'F', 'Otro']
 const CIVIL_STATUSES = ['Soltero', 'Casado', 'Viudo', 'Divorciado']
 const GENDER_LABELS = { M: 'Masculino', F: 'Femenino', Otro: 'Otro' }
@@ -42,6 +47,40 @@ function readFileAsDataUrl(file) {
     })
 }
 
+function loadImageElement(dataUrl) {
+    return new Promise((resolve, reject) => {
+        const img = new Image()
+        img.onload = () => resolve(img)
+        img.onerror = () => reject(new Error('No se pudo procesar la imagen'))
+        img.src = dataUrl
+    })
+}
+
+function estimateBase64Bytes(dataUrl) {
+    const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1)
+    return Math.ceil(base64.length * 0.75)
+}
+
+// Redimensiona y comprime la imagen a JPEG para que quepa cómoda dentro del
+// documento de Firestore, sin importar qué tan pesada sea la foto original.
+async function resizeImageToDataUrl(file, maxDimension = 480) {
+    const originalDataUrl = await readFileAsDataUrl(file)
+    const img = await loadImageElement(originalDataUrl)
+    const scale = Math.min(1, maxDimension / Math.max(img.width, img.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(img.width * scale))
+    canvas.height = Math.max(1, Math.round(img.height * scale))
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+
+    let quality = 0.85
+    let dataUrl = canvas.toDataURL('image/jpeg', quality)
+    while (estimateBase64Bytes(dataUrl) > MAX_STORED_PHOTO_BYTES && quality > 0.35) {
+        quality -= 0.15
+        dataUrl = canvas.toDataURL('image/jpeg', quality)
+    }
+    return dataUrl
+}
+
 const EMPTY_MEMBER_FORM = { birth_date: '', gender: 'M', civil_status: 'Soltero', phone: '' }
 const EMPTY_LIFE_FORM = { address: '', occupation: '', ministry: '', baptized: false, baptism_date: '', family_info: '', emergency_contact: '', emergency_phone: '', blood_type: '', allergies: '' }
 
@@ -49,6 +88,7 @@ export default function ProfilePage() {
     const { user, updateProfile } = useAuth()
     const fileInputRef = useRef(null)
     const [previewUrl, setPreviewUrl] = useState(null)
+    const [processingPhoto, setProcessingPhoto] = useState(false)
     const [saving, setSaving] = useState(false)
     const [toast, setToast] = useState(null)
     const [member, setMember] = useState(null)
@@ -163,18 +203,20 @@ export default function ProfilePage() {
             return
         }
 
+        setProcessingPhoto(true)
         try {
-            const dataUrl = await readFileAsDataUrl(file)
-            setPreviewUrl(dataUrl)
+            const compressedDataUrl = await resizeImageToDataUrl(file)
+            setPreviewUrl(compressedDataUrl)
         } catch {
             showToast('Error al procesar la imagen', 'error')
+        } finally {
+            setProcessingPhoto(false)
         }
     }
 
     const handleSave = () => {
         if (!previewUrl) return
         setSaving(true)
-        // Simulate brief network delay for UX
         setTimeout(() => {
             const result = updateProfile({ photo_url: previewUrl })
             setSaving(false)
@@ -288,15 +330,17 @@ export default function ProfilePage() {
                     <div className="flex gap-3">
                         <button
                             onClick={() => fileInputRef.current?.click()}
-                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-[#2696D2] bg-[#E8F4FC] hover:bg-[#D6EEFA] transition-all cursor-pointer"
+                            disabled={processingPhoto}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-[#2696D2] bg-[#E8F4FC] hover:bg-[#D6EEFA] transition-all cursor-pointer disabled:opacity-60"
                         >
                             <Camera className="w-4 h-4" />
-                            Cambiar foto
+                            {processingPhoto ? 'Procesando...' : 'Cambiar foto'}
                         </button>
                         {(user.photo_url || previewUrl) && (
                             <button
                                 onClick={handleRemovePhoto}
-                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-red-500 bg-red-50 hover:bg-red-100 transition-all cursor-pointer"
+                                disabled={processingPhoto}
+                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-red-500 bg-red-50 hover:bg-red-100 transition-all cursor-pointer disabled:opacity-60"
                             >
                                 Eliminar foto
                             </button>

@@ -113,8 +113,12 @@ export default function Sidebar() {
     return (
         <>
             {/* Mobile top bar */}
-            <div className="lg:hidden fixed top-0 left-0 right-0 h-14 z-40 flex items-center justify-between px-4"
-                style={{ background: 'linear-gradient(180deg, #010101 0%, #111111 100%)' }}>
+            <div className="lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4"
+                style={{
+                    background: 'linear-gradient(180deg, #010101 0%, #111111 100%)',
+                    height: 'calc(3.5rem + env(safe-area-inset-top))',
+                    paddingTop: 'env(safe-area-inset-top)',
+                }}>
                 <button onClick={() => setMobileOpen(true)} className="text-white p-2 -ml-2 cursor-pointer" aria-label="Abrir menú">
                     <Menu className="w-6 h-6" />
                 </button>
@@ -133,7 +137,8 @@ export default function Sidebar() {
                 }`}
                 style={{ background: 'linear-gradient(180deg, #010101 0%, #111111 100%)' }}>
             {/* Logo */}
-            <div className="p-6 border-b border-white/10 flex items-center justify-between">
+            <div className="p-6 border-b border-white/10 flex items-center justify-between"
+                style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))' }}>
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center"
                         style={{ background: 'linear-gradient(135deg, #2696D2, #5CB0E0)' }}>
@@ -239,7 +244,8 @@ export default function Sidebar() {
             </nav>
 
             {/* Settings + Logout */}
-            <div className="p-3 border-t border-white/10 space-y-1">
+            <div className="p-3 border-t border-white/10 space-y-1"
+                style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
                 {user?.role === 'admin' && (
                     <NavLink
                         to="/admin/settings"
