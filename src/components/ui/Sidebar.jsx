@@ -15,6 +15,15 @@ import {
 
 const INSTAGRAM_URL = 'https://www.instagram.com/unrefugioparalafamilia/'
 const FACEBOOK_URL = 'https://www.facebook.com/unrefugioparalafamilia'
+const SPOTIFY_PLAYLIST_URL = 'https://open.spotify.com/playlist/0kLcnwoaiyIFwWOKgMKVMI'
+
+function SpotifyIcon({ className }) {
+    return (
+        <svg viewBox="0 0 24 24" className={className} fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.48.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 10.68 15 11.34 18.72 13.62c.361.181.54.78.24 1.42zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.6.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.42 1.56-.299.421-1.02.599-1.559.3z" />
+        </svg>
+    )
+}
 
 const NAV_CONFIG = {
     admin: [
@@ -273,6 +282,15 @@ export default function Sidebar() {
                 >
                     <Instagram className="w-5 h-5" />
                     <span>Instagram</span>
+                </a>
+                <a
+                    href={SPOTIFY_PLAYLIST_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all duration-200"
+                >
+                    <SpotifyIcon className="w-5 h-5 text-[#1ED760]" />
+                    <span>Playlist Spotify</span>
                 </a>
                 <button
                     onClick={handleLogout}
