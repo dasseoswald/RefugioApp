@@ -27,6 +27,7 @@ const NAV_CONFIG = {
         { to: '/admin/eventos', icon: PartyPopper, label: 'Eventos' },
         { to: '/admin/chat', icon: MessageCircle, label: 'Chat en Vivo' },
         { to: '/admin/foro', icon: MessageCircleQuestion, label: 'Foro' },
+        { to: '/admin/biblia', icon: BookOpen, label: 'Biblia' },
         { to: '/admin/radio', icon: Radio, label: 'Radio Refugio' },
     ],
     controller: [
@@ -38,6 +39,7 @@ const NAV_CONFIG = {
         { to: '/controller/eventos', icon: PartyPopper, label: 'Eventos' },
         { to: '/controller/chat', icon: MessageCircle, label: 'Chat en Vivo' },
         { to: '/controller/foro', icon: MessageCircleQuestion, label: 'Foro' },
+        { to: '/controller/biblia', icon: BookOpen, label: 'Biblia' },
         { to: '/controller/radio', icon: Radio, label: 'Radio Refugio' },
     ],
     attendee: [
@@ -46,6 +48,7 @@ const NAV_CONFIG = {
         { to: '/attendee/eventos', icon: PartyPopper, label: 'Eventos' },
         { to: '/attendee/chat', icon: MessageCircle, label: 'Chat en Vivo' },
         { to: '/attendee/foro', icon: MessageCircleQuestion, label: 'Foro' },
+        { to: '/attendee/biblia', icon: BookOpen, label: 'Biblia' },
         { to: '/attendee/radio', icon: Radio, label: 'Radio Refugio' },
     ],
     tesorero: [
@@ -54,6 +57,7 @@ const NAV_CONFIG = {
         { to: '/tesorero/eventos', icon: PartyPopper, label: 'Eventos' },
         { to: '/tesorero/chat', icon: MessageCircle, label: 'Chat en Vivo' },
         { to: '/tesorero/foro', icon: MessageCircleQuestion, label: 'Foro' },
+        { to: '/tesorero/biblia', icon: BookOpen, label: 'Biblia' },
         { to: '/tesorero/radio', icon: Radio, label: 'Radio Refugio' },
     ],
 }

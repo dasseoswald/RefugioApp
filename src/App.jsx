@@ -21,6 +21,7 @@ import PrayerRequestsPage from './pages/shared/PrayerRequestsPage.jsx'
 import EventsPage from './pages/shared/EventsPage.jsx'
 import LiveChatPage from './pages/shared/LiveChatPage.jsx'
 import RadioPage from './pages/shared/RadioPage.jsx'
+import BibliaPage from './pages/shared/BibliaPage.jsx'
 import ForumPage from './pages/shared/ForumPage.jsx'
 import FinanzasPage from './pages/tesorero/FinanzasPage.jsx'
 import OnboardingPrompt from './components/shared/OnboardingPrompt.jsx'
@@ -200,6 +201,11 @@ export default function App() {
             <Route path="/:role/radio" element={
                 <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero']}>
                     <AppLayout><RadioPage /></AppLayout>
+                </ProtectedRoute>
+            } />
+            <Route path="/:role/biblia" element={
+                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero']}>
+                    <AppLayout><BibliaPage /></AppLayout>
                 </ProtectedRoute>
             } />
 
