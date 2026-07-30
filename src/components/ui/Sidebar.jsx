@@ -102,13 +102,13 @@ export default function Sidebar() {
             {/* Mobile top bar */}
             <div className="lg:hidden fixed top-0 left-0 right-0 h-14 z-40 flex items-center justify-between px-4"
                 style={{ background: 'linear-gradient(180deg, #010101 0%, #111111 100%)' }}>
+                <button onClick={() => setMobileOpen(true)} className="text-white p-2 -ml-2 cursor-pointer" aria-label="Abrir menú">
+                    <Menu className="w-6 h-6" />
+                </button>
                 <div className="flex items-center gap-2">
                     <img src={logo} alt="Refugio App" className="w-7 h-7 object-contain" />
                     <span className="text-white font-bold text-base">Refugio App</span>
                 </div>
-                <button onClick={() => setMobileOpen(true)} className="text-white p-2 -mr-2 cursor-pointer" aria-label="Abrir menú">
-                    <Menu className="w-6 h-6" />
-                </button>
             </div>
 
             {/* Mobile backdrop */}
