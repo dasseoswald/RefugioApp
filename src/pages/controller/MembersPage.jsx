@@ -125,9 +125,11 @@ export default function MembersPage({ canToggleActive = false }) {
                                 <th className="text-left px-6 py-3 text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider hidden md:table-cell">Tipo</th>
                                 <th className="text-left px-6 py-3 text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider hidden lg:table-cell">Teléfono</th>
                                 <th className="text-left px-6 py-3 text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider hidden lg:table-cell">
-                                    {filterType === 'Visitante' ? 'Seguimiento de Bienvenida' : 'Refugio Designado'}
+                                    {filterType === 'Visitante' ? 'Próximo Paso' : 'Refugio Designado'}
                                 </th>
-                                <th className="text-left px-6 py-3 text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider">Estado</th>
+                                <th className="text-left px-6 py-3 text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider">
+                                    {filterType === 'Visitante' ? 'Bienvenida' : 'Estado'}
+                                </th>
                                 <th className="text-right px-6 py-3 text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider">Acciones</th>
                             </tr>
                         </thead>
@@ -158,18 +160,9 @@ export default function MembersPage({ canToggleActive = false }) {
                                                 (() => {
                                                     const checks = Math.min(attendanceCount, WELCOME_CHECK_ACTIONS.length)
                                                     return (
-                                                        <div className="flex flex-col gap-1">
-                                                            <div className="flex items-center gap-0.5">
-                                                                {WELCOME_CHECK_ACTIONS.map((_, i) => (
-                                                                    i < checks
-                                                                        ? <CheckCircle2 key={i} className="w-4 h-4 text-[#13CD68]" />
-                                                                        : <Circle key={i} className="w-4 h-4 text-gray-200" />
-                                                                ))}
-                                                            </div>
-                                                            <span className="text-xs text-[#6E6E6E]">
-                                                                {checks > 0 ? `Corresponde: ${WELCOME_CHECK_ACTIONS[checks - 1]}` : 'Aún sin asistencias'}
-                                                            </span>
-                                                        </div>
+                                                        <span className="text-xs text-[#6E6E6E]">
+                                                            {checks > 0 ? (checks >= WELCOME_CHECK_ACTIONS.length ? 'Bienvenida completa' : `Corresponde: ${WELCOME_CHECK_ACTIONS[checks - 1]}`) : 'Aún sin asistencias'}
+                                                        </span>
                                                     )
                                                 })()
                                             ) : memberRefugio ? (
@@ -184,9 +177,24 @@ export default function MembersPage({ canToggleActive = false }) {
                                             )}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${member.is_active ? 'bg-[#E1F9EC] text-[#13CD68]' : 'bg-gray-100 text-[#6E6E6E]'}`}>
-                                                {member.is_active ? 'Activo' : 'Inactivo'}
-                                            </span>
+                                            {filterType === 'Visitante' ? (
+                                                (() => {
+                                                    const checks = Math.min(attendanceCount, WELCOME_CHECK_ACTIONS.length)
+                                                    return (
+                                                        <div className="flex items-center gap-0.5">
+                                                            {WELCOME_CHECK_ACTIONS.map((_, i) => (
+                                                                i < checks
+                                                                    ? <CheckCircle2 key={i} className="w-4 h-4 text-[#13CD68]" />
+                                                                    : <Circle key={i} className="w-4 h-4 text-gray-200" />
+                                                            ))}
+                                                        </div>
+                                                    )
+                                                })()
+                                            ) : (
+                                                <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${member.is_active ? 'bg-[#E1F9EC] text-[#13CD68]' : 'bg-gray-100 text-[#6E6E6E]'}`}>
+                                                    {member.is_active ? 'Activo' : 'Inactivo'}
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
