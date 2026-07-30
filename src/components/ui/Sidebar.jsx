@@ -175,7 +175,8 @@ export default function Sidebar() {
             </button>
 
             {/* Navigation */}
-            <nav onClick={(e) => { if (e.target.closest('a')) setMobileOpen(false) }} className="flex-1 py-4 px-3 overflow-y-auto">
+            <nav onClick={(e) => { if (e.target.closest('a')) setMobileOpen(false) }} className="flex-1 py-4 px-3 overflow-y-auto"
+                style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
                 <ul className="space-y-1">
                     {navItems.map((item) => (
                         <li key={item.to}>
@@ -241,11 +242,9 @@ export default function Sidebar() {
                         )}
                     </div>
                 )}
-            </nav>
 
-            {/* Settings + Logout */}
-            <div className="p-3 border-t border-white/10 space-y-1"
-                style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+                {/* Configuración, redes sociales y cerrar sesión */}
+                <div className="mt-4 border-t border-white/10 pt-4 space-y-1">
                 {user?.role === 'admin' && (
                     <NavLink
                         to="/admin/settings"
@@ -305,7 +304,8 @@ export default function Sidebar() {
                     <LogOut className="w-5 h-5" />
                     <span>Cerrar Sesión</span>
                 </button>
-            </div>
+                </div>
+            </nav>
             </aside>
         </>
     )
