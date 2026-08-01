@@ -5,8 +5,9 @@ import {
     OPERATIONAL_GROUPS, getMembers, patchMember,
     getGroupNotices, createGroupNotice,
     getGroupMessages, sendGroupMessage,
-    getServices, ALABANZA_ROLES, getAlabanzaAssignmentsForService, setAlabanzaAssignment,
-    getAlabanzaSongs, createAlabanzaSong, updateAlabanzaSong, deleteAlabanzaSong
+    getUpcomingServices, ALABANZA_ROLES, getAlabanzaAssignmentsForService, setAlabanzaAssignment,
+    getAlabanzaSongs, createAlabanzaSong, updateAlabanzaSong, deleteAlabanzaSong,
+    getSetlistForService, addSongToSetlist, removeSongFromSetlist, setSetlistPerformer
 } from '../../data/mockData.js'
 import { transposeChordChart, transposeKeyLabel, keyDifference, detectFirstChordRoot, KEY_OPTIONS } from '../../lib/chordTranspose.js'
 import {
@@ -134,7 +135,7 @@ export default function GroupDashboardPage() {
             {activeTab === 'notices' && <NoticesTab group={group} myProfile={myMemberProfile || user} canPublish={canPublishNotices} color={color} />}
             {activeTab === 'chat' && <ChatTab group={group} myProfile={myMemberProfile || user} canChat={canChat} color={color} />}
             {activeTab === 'calendar' && group.id === 'alabanza' && <CalendarTab group={group} canManage={canPublishNotices} color={color} gradient={gradient} />}
-            {activeTab === 'repertoire' && group.id === 'alabanza' && <RepertoireTab canManage={canPublishNotices} color={color} />}
+            {activeTab === 'repertoire' && group.id === 'alabanza' && <RepertoireTab group={group} canManage={canPublishNotices} color={color} />}
         </div>
     )
 }
@@ -591,21 +592,31 @@ function ChatTab({ group, myProfile, canChat, color }) {
 function CalendarTab({ group, canManage, color, gradient }) {
     const [services, setServices] = useState([])
     const [eligibleMembers, setEligibleMembers] = useState([])
+    const [songs, setSongs] = useState([])
     const [assignmentsByService, setAssignmentsByService] = useState({})
+    const [setlistByService, setSetlistByService] = useState({})
 
     useEffect(() => {
         refreshServices()
         setEligibleMembers(getMembers().filter(m => m.is_active && m[group.field]))
+        setSongs(getAlabanzaSongs())
     }, [group.field])
 
     const refreshServices = () => {
-        const upcoming = getServices()
-            .filter(s => s.service_type === 'sunday' || s.service_type === 'thursday')
-            .sort((a, b) => new Date(b.service_date) - new Date(a.service_date))
+        const upcoming = getUpcomingServices(8)
         setServices(upcoming)
         const byService = {}
-        upcoming.forEach(s => { byService[s.id] = getAlabanzaAssignmentsForService(s.id) })
+        const setlists = {}
+        upcoming.forEach(s => {
+            byService[s.id] = getAlabanzaAssignmentsForService(s.id)
+            setlists[s.id] = getSetlistForService(s.id)
+        })
         setAssignmentsByService(byService)
+        setSetlistByService(setlists)
+    }
+
+    const refreshSetlist = (serviceId) => {
+        setSetlistByService(prev => ({ ...prev, [serviceId]: getSetlistForService(serviceId) }))
     }
 
     const handleAssign = (serviceId, roleId, memberId) => {
@@ -617,6 +628,22 @@ function CalendarTab({ group, canManage, color, gradient }) {
                 ...(memberId ? [{ id: `alab-${serviceId}-${roleId}`, service_id: serviceId, role_id: roleId, member_id: memberId }] : []),
             ],
         }))
+    }
+
+    const handleAddSong = (serviceId, songId) => {
+        if (!songId) return
+        addSongToSetlist(serviceId, songId)
+        refreshSetlist(serviceId)
+    }
+
+    const handleRemoveSong = (itemId, serviceId) => {
+        removeSongFromSetlist(itemId)
+        refreshSetlist(serviceId)
+    }
+
+    const handlePerformerChange = (itemId, serviceId, performerId) => {
+        setSetlistPerformer(itemId, performerId || null)
+        refreshSetlist(serviceId)
     }
 
     const formatServiceDate = (dateStr) => {
@@ -637,13 +664,16 @@ function CalendarTab({ group, canManage, color, gradient }) {
             {services.length === 0 ? (
                 <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] p-12 text-center text-[#6E6E6E]">
                     <Calendar className="w-12 h-12 mx-auto mb-3 text-[#6E6E6E]/20" />
-                    <p className="text-lg font-medium">No hay servicios creados todavía</p>
+                    <p className="text-lg font-medium">No hay próximos servicios creados</p>
                     <p className="text-sm mt-1">Los servicios (jueves y domingo) se crean desde Servicios.</p>
                 </div>
             ) : (
                 services.map(service => {
                     const assignments = assignmentsByService[service.id] || []
                     const assignedMemberId = (roleId) => assignments.find(a => a.role_id === roleId)?.member_id || ''
+                    const setlist = setlistByService[service.id] || []
+                    const setlistSongIds = new Set(setlist.map(item => item.song_id))
+                    const availableSongs = songs.filter(s => !setlistSongIds.has(s.id))
 
                     return (
                         <div key={service.id} className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] overflow-hidden">
@@ -679,10 +709,92 @@ function CalendarTab({ group, canManage, color, gradient }) {
                                     </div>
                                 ))}
                             </div>
+
+                            {/* Canciones de este servicio */}
+                            <div className="border-t border-gray-100 p-4 space-y-3">
+                                <h4 className="text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider flex items-center gap-1.5">
+                                    <ListMusic className="w-3.5 h-3.5" /> Canciones de este servicio
+                                </h4>
+                                {setlist.length === 0 ? (
+                                    <p className="text-sm text-[#6E6E6E]">Sin canciones agregadas todavía.</p>
+                                ) : (
+                                    <ul className="space-y-2">
+                                        {setlist.map(item => {
+                                            const song = songs.find(s => s.id === item.song_id)
+                                            if (!song) return null
+                                            return (
+                                                <li key={item.id} className="flex items-center gap-2 flex-wrap">
+                                                    <span className="text-sm font-medium text-[#111111] flex-1 min-w-[140px]">{song.title}</span>
+                                                    {canManage ? (
+                                                        <select
+                                                            value={item.performer_id || ''}
+                                                            onChange={(e) => handlePerformerChange(item.id, service.id, e.target.value)}
+                                                            className="px-3 py-1.5 rounded-lg border-2 border-gray-100 bg-gray-50/50 text-sm cursor-pointer focus:outline-none focus:border-[#2696D2]"
+                                                        >
+                                                            <option value="">Sin intérprete</option>
+                                                            {eligibleMembers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+                                                        </select>
+                                                    ) : (
+                                                        <span className="text-xs text-[#6E6E6E]">
+                                                            {eligibleMembers.find(m => m.id === item.performer_id)?.full_name || 'Sin intérprete'}
+                                                        </span>
+                                                    )}
+                                                    {canManage && (
+                                                        <button onClick={() => handleRemoveSong(item.id, service.id)}
+                                                            className="p-1.5 rounded-lg text-[#E74C3C] hover:bg-[#FADBD8] transition-colors cursor-pointer" aria-label="Quitar canción">
+                                                            <X className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                </li>
+                                            )
+                                        })}
+                                    </ul>
+                                )}
+                                {canManage && (
+                                    songs.length === 0 ? (
+                                        <p className="text-xs text-[#6E6E6E]/70">Agrega canciones desde la pestaña Repertorio para poder elegirlas aquí.</p>
+                                    ) : availableSongs.length === 0 ? (
+                                        <p className="text-xs text-[#6E6E6E]/70">Todas las canciones del repertorio ya están agregadas.</p>
+                                    ) : (
+                                        <AddSongRow serviceId={service.id} availableSongs={availableSongs} onAdd={handleAddSong} />
+                                    )
+                                )}
+                            </div>
                         </div>
                     )
                 })
             )}
+        </div>
+    )
+}
+
+function AddSongRow({ serviceId, availableSongs, onAdd }) {
+    const [songId, setSongId] = useState('')
+
+    const handleAdd = () => {
+        if (!songId) return
+        onAdd(serviceId, songId)
+        setSongId('')
+    }
+
+    return (
+        <div className="flex items-center gap-2">
+            <select
+                value={songId}
+                onChange={(e) => setSongId(e.target.value)}
+                className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-100 bg-white text-sm cursor-pointer focus:outline-none focus:border-[#2696D2]"
+            >
+                <option value="">Agregar canción del repertorio...</option>
+                {availableSongs.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+            </select>
+            <button
+                onClick={handleAdd}
+                disabled={!songId}
+                className="px-3 py-2 rounded-xl text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5 flex-shrink-0"
+                style={{ background: '#2696D2' }}
+            >
+                <Plus className="w-4 h-4" /> Agregar
+            </button>
         </div>
     )
 }
@@ -692,8 +804,11 @@ function CalendarTab({ group, canManage, color, gradient }) {
 // con transposición de tonalidad en el navegador (sin audio ni OCR: los
 // acordes ya vienen como texto, ver src/lib/chordTranspose.js).
 // ---------------------------------------------------------------------------------------------------
-function RepertoireTab({ canManage, color }) {
+function RepertoireTab({ group, canManage, color }) {
     const [songs, setSongs] = useState([])
+    const [eligibleMembers, setEligibleMembers] = useState([])
+    const [upcomingServices, setUpcomingServices] = useState([])
+    const [filterServiceId, setFilterServiceId] = useState('')
     const [selectedId, setSelectedId] = useState(null)
     const [semitones, setSemitones] = useState(0)
     const [preferFlats, setPreferFlats] = useState(false)
@@ -701,9 +816,27 @@ function RepertoireTab({ canManage, color }) {
     const [keyInput, setKeyInput] = useState('')
     const [form, setForm] = useState({ title: '', original_key: '', chord_chart: '' })
 
-    useEffect(() => { refresh() }, [])
+    useEffect(() => {
+        refresh()
+        setEligibleMembers(getMembers().filter(m => m.is_active && m[group.field]))
+        const upcoming = getUpcomingServices(8)
+        setUpcomingServices(upcoming)
+        setFilterServiceId(upcoming[0]?.id || '')
+    }, [group.field])
 
     const refresh = () => setSongs(getAlabanzaSongs())
+
+    const formatServiceOption = (service) => {
+        const [year, month, day] = service.service_date.split('-').map(Number)
+        const date = new Date(year, month - 1, day)
+        const label = date.toLocaleDateString('es', { day: 'numeric', month: 'short' })
+        return `${service.service_type === 'thursday' ? 'Jueves' : 'Domingo'} ${label}`
+    }
+
+    const setlist = filterServiceId ? getSetlistForService(filterServiceId) : []
+    const displayedSongs = filterServiceId
+        ? setlist.map(item => ({ song: songs.find(s => s.id === item.song_id), performerId: item.performer_id })).filter(entry => entry.song)
+        : songs.map(song => ({ song, performerId: null }))
 
     const selectedSong = songs.find(s => s.id === selectedId) || null
 
@@ -884,17 +1017,35 @@ function RepertoireTab({ canManage, color }) {
             )}
 
             <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100">
+                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
                     <h3 className="text-lg font-semibold text-[#111111]">Repertorio</h3>
+                    {upcomingServices.length > 0 && (
+                        <div className="flex items-center gap-2">
+                            <label className="text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider">Filtrar por servicio</label>
+                            <select
+                                value={filterServiceId}
+                                onChange={(e) => setFilterServiceId(e.target.value)}
+                                className="px-3 py-1.5 rounded-lg border-2 border-gray-100 bg-white text-sm cursor-pointer focus:outline-none focus:border-[#2696D2]"
+                            >
+                                <option value="">Todas las canciones</option>
+                                {upcomingServices.map(s => (
+                                    <option key={s.id} value={s.id}>{formatServiceOption(s)}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                 </div>
-                {songs.length === 0 ? (
+                {displayedSongs.length === 0 ? (
                     <div className="p-12 text-center text-[#6E6E6E]">
                         <ListMusic className="w-12 h-12 mx-auto mb-3 text-[#6E6E6E]/20" />
-                        <p className="text-lg font-medium">Todavía no hay canciones en el repertorio</p>
+                        <p className="text-lg font-medium">
+                            {filterServiceId ? 'Todavía no hay canciones asignadas a este servicio' : 'Todavía no hay canciones en el repertorio'}
+                        </p>
+                        {filterServiceId && <p className="text-sm mt-1">Agrégalas desde la pestaña Calendario.</p>}
                     </div>
                 ) : (
                     <div className="divide-y divide-gray-50">
-                        {songs.map(song => (
+                        {displayedSongs.map(({ song, performerId }) => (
                             <button key={song.id} onClick={() => openSong(song.id)}
                                 className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50/50 transition-colors cursor-pointer text-left">
                                 <div className="flex items-center gap-3">
@@ -906,6 +1057,11 @@ function RepertoireTab({ canManage, color }) {
                                         {song.original_key && <p className="text-xs text-[#6E6E6E]">Tonalidad original: {song.original_key}</p>}
                                     </div>
                                 </div>
+                                {filterServiceId && (
+                                    <span className="text-xs text-[#6E6E6E] flex-shrink-0">
+                                        {eligibleMembers.find(m => m.id === performerId)?.full_name || 'Sin intérprete'}
+                                    </span>
+                                )}
                             </button>
                         ))}
                     </div>

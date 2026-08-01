@@ -230,6 +230,17 @@ export function toggleMemberActive(id) {
 
 export function getServices() { return [...SERVICES] }
 
+// Próximos servicios (jueves/domingo) desde hoy en adelante, ordenados por
+// fecha ascendente. Se usa para que los ministerios (ej. Alabanza) puedan
+// mostrar con anticipación lo que viene, en vez de todo el historial.
+export function getUpcomingServices(limit = 8) {
+    const todayStr = new Date().toISOString().split('T')[0]
+    return SERVICES
+        .filter(s => (s.service_type === 'sunday' || s.service_type === 'thursday') && s.service_date >= todayStr)
+        .sort((a, b) => new Date(a.service_date) - new Date(b.service_date))
+        .slice(0, limit)
+}
+
 // Cada tipo de servicio (domingo, jueves) tiene su propio servicio "activo",
 // independiente del otro. Si no se pide un tipo puntual, se adivina según el
 // día de hoy (domingo=0, jueves=4); fuera de esos días, cae al comportamiento
@@ -1154,6 +1165,43 @@ export function deleteAlabanzaSong(id) {
     deleteDoc(doc(db, 'alabanzaSongs', id)).catch(err => console.error('No se pudo borrar la canción', err))
 }
 
+// Repertorio (setlist) de un servicio específico: qué canciones se tocan
+// ese día y quién la interpreta. Id determinístico por (servicio, canción)
+// para que no se pueda agregar la misma canción dos veces al mismo servicio.
+let ALABANZA_SETLISTS = []
+
+export function getSetlistForService(serviceId) {
+    return ALABANZA_SETLISTS.filter(s => s.service_id === serviceId).sort((a, b) => a.order - b.order)
+}
+
+export function getSetlistSongIds(serviceId) {
+    return new Set(getSetlistForService(serviceId).map(s => s.song_id))
+}
+
+export function addSongToSetlist(serviceId, songId) {
+    const id = `setlist-${serviceId}-${songId}`
+    if (ALABANZA_SETLISTS.some(s => s.id === id)) return null
+    const order = getSetlistForService(serviceId).length
+    const newItem = { id, service_id: serviceId, song_id: songId, performer_id: null, order }
+    ALABANZA_SETLISTS = [...ALABANZA_SETLISTS, newItem]
+    const { id: _id, ...rest } = newItem
+    setDoc(doc(db, 'alabanzaSetlists', id), rest).catch(err => console.error('No se pudo sincronizar el repertorio del servicio', err))
+    return newItem
+}
+
+export function removeSongFromSetlist(id) {
+    ALABANZA_SETLISTS = ALABANZA_SETLISTS.filter(s => s.id !== id)
+    deleteDoc(doc(db, 'alabanzaSetlists', id)).catch(err => console.error('No se pudo quitar la canción del repertorio', err))
+}
+
+export function setSetlistPerformer(id, performerId) {
+    const index = ALABANZA_SETLISTS.findIndex(s => s.id === id)
+    if (index === -1) return
+    const updated = { ...ALABANZA_SETLISTS[index], performer_id: performerId || null }
+    ALABANZA_SETLISTS = ALABANZA_SETLISTS.map((s, i) => (i === index ? updated : s))
+    updateDoc(doc(db, 'alabanzaSetlists', id), { performer_id: performerId || null }).catch(err => console.error('No se pudo sincronizar el intérprete', err))
+}
+
 export function getMemberEscuelaProgress(memberId) {
     const enrollments = getEscuelaEnrollments();
     const enrolled = enrollments.find(e => e.member_id === memberId);
@@ -1733,5 +1781,11 @@ export function startCoreDataSync() {
         ALABANZA_SONGS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
     }, (err) => {
         console.error('Error sincronizando repertorio de alabanza', err)
+    })
+
+    onSnapshot(collection(db, 'alabanzaSetlists'), (snap) => {
+        ALABANZA_SETLISTS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    }, (err) => {
+        console.error('Error sincronizando el repertorio de los servicios', err)
     })
 }
