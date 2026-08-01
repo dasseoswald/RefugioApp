@@ -92,28 +92,28 @@ export default function GroupDashboardPage() {
             </div>
 
             {/* Tabs */}
-            <div className="flex items-center gap-2 border-b border-gray-200">
+            <div className="flex items-center gap-2 border-b border-gray-200 overflow-x-auto">
                 <button onClick={() => setActiveTab('members')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap ${
                         activeTab === 'members' ? 'border-[#2696D2] text-[#111111]' : 'border-transparent text-[#6E6E6E] hover:text-[#111111]'
                     }`}>
                     <Users className="w-4 h-4" /> Miembros
                 </button>
                 <button onClick={() => setActiveTab('notices')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap ${
                         activeTab === 'notices' ? 'border-[#2696D2] text-[#111111]' : 'border-transparent text-[#6E6E6E] hover:text-[#111111]'
                     }`}>
                     <Megaphone className="w-4 h-4" /> Avisos
                 </button>
                 <button onClick={() => setActiveTab('chat')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap ${
                         activeTab === 'chat' ? 'border-[#2696D2] text-[#111111]' : 'border-transparent text-[#6E6E6E] hover:text-[#111111]'
                     }`}>
                     <MessageCircle className="w-4 h-4" /> Chat
                 </button>
                 {group.id === 'alabanza' && (
                     <button onClick={() => setActiveTab('calendar')}
-                        className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                        className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap ${
                             activeTab === 'calendar' ? 'border-[#2696D2] text-[#111111]' : 'border-transparent text-[#6E6E6E] hover:text-[#111111]'
                         }`}>
                         <Calendar className="w-4 h-4" /> Calendario
@@ -121,7 +121,7 @@ export default function GroupDashboardPage() {
                 )}
                 {group.id === 'alabanza' && (
                     <button onClick={() => setActiveTab('repertoire')}
-                        className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                        className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap ${
                             activeTab === 'repertoire' ? 'border-[#2696D2] text-[#111111]' : 'border-transparent text-[#6E6E6E] hover:text-[#111111]'
                         }`}>
                         <ListMusic className="w-4 h-4" /> Repertorio
