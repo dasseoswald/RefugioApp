@@ -105,3 +105,34 @@ export function transposeKeyLabel(key, semitones, preferFlats = false) {
     if (!key) return ''
     return transposeToken(key.trim(), semitones, preferFlats)
 }
+
+function keyToIndex(key) {
+    if (!key) return null
+    const match = key.trim().match(/^([A-G])(#|b)?/)
+    if (!match) return null
+    return NOTE_TO_INDEX[match[1] + (match[2] || '')] ?? null
+}
+
+// Semitonos (con signo, en el rango -6..+5: el camino más corto) para pasar
+// de una tonalidad a otra. Útil para el selector de "ir directo a esta
+// tonalidad", en vez de solo subir/bajar de a un semitono.
+export function keyDifference(fromKey, toKey) {
+    const fromIndex = keyToIndex(fromKey)
+    const toIndex = keyToIndex(toKey)
+    if (fromIndex === null || toIndex === null) return 0
+    return ((toIndex - fromIndex + 6 + 12) % 12) - 6
+}
+
+// Mejor esfuerzo para inferir la tonalidad de un cifrado que no tiene
+// "tonalidad original" guardada: toma la raíz del primer acorde reconocido
+// en el texto. Es solo una sugerencia (muchas canciones modulan a mitad de
+// camino) — el usuario siempre puede corregirla a mano.
+export function detectFirstChordRoot(chordChart) {
+    if (!chordChart) return null
+    const tokens = chordChart.split(/\s+/)
+    for (const token of tokens) {
+        const match = token.match(CHORD_TOKEN_REGEX)
+        if (match) return match[1] + (match[2] || '')
+    }
+    return null
+}

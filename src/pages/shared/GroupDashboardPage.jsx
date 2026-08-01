@@ -6,14 +6,14 @@ import {
     getGroupNotices, createGroupNotice,
     getGroupMessages, sendGroupMessage,
     getServices, ALABANZA_ROLES, getAlabanzaAssignmentsForService, setAlabanzaAssignment,
-    getAlabanzaSongs, createAlabanzaSong, deleteAlabanzaSong
+    getAlabanzaSongs, createAlabanzaSong, updateAlabanzaSong, deleteAlabanzaSong
 } from '../../data/mockData.js'
-import { transposeChordChart, transposeKeyLabel, KEY_OPTIONS } from '../../lib/chordTranspose.js'
+import { transposeChordChart, transposeKeyLabel, keyDifference, detectFirstChordRoot, KEY_OPTIONS } from '../../lib/chordTranspose.js'
 import {
     Users, Megaphone, MessageCircle, Image, Send,
     CheckCircle2, UserPlus, UserMinus, Search,
     Paperclip, X, BookOpen, Sprout, UserCircle, UserSquare, Baby, Music, Home, Calendar,
-    ListMusic, Plus, Trash2, MinusCircle, PlusCircle, ChevronLeft
+    ListMusic, Plus, Trash2, MinusCircle, PlusCircle, ChevronLeft, Edit2, Check
 } from 'lucide-react'
 
 const ICONS_MAP = { BookOpen, Sprout, Users, UserCircle, UserSquare, Baby, Music, Home }
@@ -697,6 +697,8 @@ function RepertoireTab({ canManage, color }) {
     const [selectedId, setSelectedId] = useState(null)
     const [semitones, setSemitones] = useState(0)
     const [preferFlats, setPreferFlats] = useState(false)
+    const [editingKey, setEditingKey] = useState(false)
+    const [keyInput, setKeyInput] = useState('')
     const [form, setForm] = useState({ title: '', original_key: '', chord_chart: '' })
 
     useEffect(() => { refresh() }, [])
@@ -705,7 +707,7 @@ function RepertoireTab({ canManage, color }) {
 
     const selectedSong = songs.find(s => s.id === selectedId) || null
 
-    const openSong = (id) => { setSelectedId(id); setSemitones(0); setPreferFlats(false) }
+    const openSong = (id) => { setSelectedId(id); setSemitones(0); setPreferFlats(false); setEditingKey(false) }
     const closeSong = () => setSelectedId(null)
 
     const handleCreate = () => {
@@ -721,9 +723,23 @@ function RepertoireTab({ canManage, color }) {
         refresh()
     }
 
+    const handleSaveKey = () => {
+        updateAlabanzaSong(selectedSong.id, { original_key: keyInput })
+        setEditingKey(false)
+        refresh()
+    }
+
     if (selectedSong) {
         const transposedChart = transposeChordChart(selectedSong.chord_chart, semitones, preferFlats)
-        const currentKeyLabel = selectedSong.original_key ? transposeKeyLabel(selectedSong.original_key, semitones, preferFlats) : null
+        const detectedKey = detectFirstChordRoot(selectedSong.chord_chart)
+        const referenceKey = selectedSong.original_key || detectedKey
+        const isDetectedGuess = !selectedSong.original_key && !!detectedKey
+        const currentKeyLabel = referenceKey ? transposeKeyLabel(referenceKey, semitones, preferFlats) : null
+
+        const handleJumpToKey = (targetKey) => {
+            if (!referenceKey || !targetKey) return
+            setSemitones(keyDifference(referenceKey, targetKey))
+        }
 
         return (
             <div className="space-y-4 animate-fade-in">
@@ -735,11 +751,39 @@ function RepertoireTab({ canManage, color }) {
                     <div className="flex items-start justify-between gap-4 flex-wrap">
                         <div>
                             <h3 className="text-lg font-bold text-[#111111]">{selectedSong.title}</h3>
-                            {currentKeyLabel && (
-                                <p className="text-sm text-[#6E6E6E] mt-1">
+                            {editingKey ? (
+                                <div className="flex items-center gap-2 mt-1.5">
+                                    <select value={keyInput} onChange={(e) => setKeyInput(e.target.value)}
+                                        className="px-3 py-1.5 rounded-lg border-2 border-gray-100 bg-white text-sm cursor-pointer focus:outline-none focus:border-[#2696D2]">
+                                        <option value="">Sin especificar</option>
+                                        {KEY_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
+                                    </select>
+                                    <button onClick={handleSaveKey} className="p-1.5 rounded-lg text-[#13CD68] hover:bg-[#E1F9EC] cursor-pointer" aria-label="Guardar tonalidad">
+                                        <Check className="w-4 h-4" />
+                                    </button>
+                                    <button onClick={() => setEditingKey(false)} className="p-1.5 rounded-lg text-[#6E6E6E] hover:bg-gray-100 cursor-pointer" aria-label="Cancelar">
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ) : currentKeyLabel ? (
+                                <p className="text-sm text-[#6E6E6E] mt-1 flex items-center gap-1.5">
                                     Tonalidad: <span className="font-semibold" style={{ color }}>{currentKeyLabel}</span>
-                                    {semitones !== 0 && <span className="text-xs text-[#6E6E6E]"> (original {selectedSong.original_key})</span>}
+                                    {semitones !== 0 && <span className="text-xs text-[#6E6E6E]">(original {referenceKey})</span>}
+                                    {isDetectedGuess && <span className="text-xs text-[#6E6E6E]/70 italic">(detectada automáticamente)</span>}
+                                    {canManage && (
+                                        <button onClick={() => { setKeyInput(selectedSong.original_key || ''); setEditingKey(true) }}
+                                            className="p-1 rounded text-[#2696D2] hover:bg-[#E8F4FC] cursor-pointer" aria-label="Editar tonalidad">
+                                            <Edit2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
                                 </p>
+                            ) : (
+                                canManage && (
+                                    <button onClick={() => { setKeyInput(''); setEditingKey(true) }}
+                                        className="text-xs text-[#2696D2] hover:underline cursor-pointer mt-1">
+                                        + Agregar tonalidad original
+                                    </button>
+                                )
                             )}
                         </div>
                         {canManage && (
@@ -761,6 +805,21 @@ function RepertoireTab({ canManage, color }) {
                             className="w-9 h-9 rounded-lg flex items-center justify-center border border-gray-200 bg-white hover:bg-gray-50 transition-colors cursor-pointer">
                             <PlusCircle className="w-4 h-4" style={{ color }} />
                         </button>
+
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-[#6E6E6E]">o ir directo a:</span>
+                            <select
+                                value={currentKeyLabel || ''}
+                                onChange={(e) => handleJumpToKey(e.target.value)}
+                                disabled={!referenceKey}
+                                className="px-3 py-1.5 rounded-lg border-2 border-gray-100 bg-white text-sm cursor-pointer focus:outline-none focus:border-[#2696D2] disabled:opacity-50 disabled:cursor-not-allowed"
+                                title={!referenceKey ? 'Agrega la tonalidad original para poder elegir directamente' : ''}
+                            >
+                                {!currentKeyLabel && <option value="">Tonalidad</option>}
+                                {KEY_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
+                            </select>
+                        </div>
+
                         {semitones !== 0 && (
                             <button onClick={() => setSemitones(0)} className="text-xs text-[#6E6E6E] hover:text-[#111111] underline cursor-pointer">
                                 Restablecer
