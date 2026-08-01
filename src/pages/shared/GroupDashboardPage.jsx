@@ -4,12 +4,16 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import {
     OPERATIONAL_GROUPS, getMembers, patchMember,
     getGroupNotices, createGroupNotice,
-    getGroupMessages, sendGroupMessage
+    getGroupMessages, sendGroupMessage,
+    getServices, ALABANZA_ROLES, getAlabanzaAssignmentsForService, setAlabanzaAssignment,
+    getAlabanzaSongs, createAlabanzaSong, deleteAlabanzaSong
 } from '../../data/mockData.js'
-import { 
-    Users, Megaphone, MessageCircle, Image, Send, 
+import { transposeChordChart, transposeKeyLabel, KEY_OPTIONS } from '../../lib/chordTranspose.js'
+import {
+    Users, Megaphone, MessageCircle, Image, Send,
     CheckCircle2, UserPlus, UserMinus, Search,
-    Paperclip, X, BookOpen, Sprout, UserCircle, UserSquare, Baby, Music, Home, Calendar
+    Paperclip, X, BookOpen, Sprout, UserCircle, UserSquare, Baby, Music, Home, Calendar,
+    ListMusic, Plus, Trash2, MinusCircle, PlusCircle, ChevronLeft
 } from 'lucide-react'
 
 const ICONS_MAP = { BookOpen, Sprout, Users, UserCircle, UserSquare, Baby, Music, Home }
@@ -107,12 +111,30 @@ export default function GroupDashboardPage() {
                     }`}>
                     <MessageCircle className="w-4 h-4" /> Chat
                 </button>
+                {group.id === 'alabanza' && (
+                    <button onClick={() => setActiveTab('calendar')}
+                        className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                            activeTab === 'calendar' ? 'border-[#2696D2] text-[#111111]' : 'border-transparent text-[#6E6E6E] hover:text-[#111111]'
+                        }`}>
+                        <Calendar className="w-4 h-4" /> Calendario
+                    </button>
+                )}
+                {group.id === 'alabanza' && (
+                    <button onClick={() => setActiveTab('repertoire')}
+                        className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                            activeTab === 'repertoire' ? 'border-[#2696D2] text-[#111111]' : 'border-transparent text-[#6E6E6E] hover:text-[#111111]'
+                        }`}>
+                        <ListMusic className="w-4 h-4" /> Repertorio
+                    </button>
+                )}
             </div>
 
             {/* Content */}
             {activeTab === 'members' && <MembersTab group={group} color={color} gradient={gradient} canManage={canManageMembers} />}
             {activeTab === 'notices' && <NoticesTab group={group} myProfile={myMemberProfile || user} canPublish={canPublishNotices} color={color} />}
             {activeTab === 'chat' && <ChatTab group={group} myProfile={myMemberProfile || user} canChat={canChat} color={color} />}
+            {activeTab === 'calendar' && group.id === 'alabanza' && <CalendarTab group={group} canManage={canPublishNotices} color={color} gradient={gradient} />}
+            {activeTab === 'repertoire' && group.id === 'alabanza' && <RepertoireTab canManage={canPublishNotices} color={color} />}
         </div>
     )
 }
@@ -548,7 +570,7 @@ function ChatTab({ group, myProfile, canChat, color }) {
                         className="flex-1 max-h-32 min-h-[44px] bg-gray-50 border border-gray-200 focus:border-[#2696D2] focus:bg-white rounded-xl px-4 py-3 text-sm resize-none outline-none transition-all"
                     />
                     
-                    <button 
+                    <button
                         onClick={handleSend}
                         disabled={!msgContent.trim() && !mediaBase64}
                         className="p-3 rounded-xl text-white transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 shadow-sm"
@@ -557,6 +579,278 @@ function ChatTab({ group, myProfile, canChat, color }) {
                         <Send className="w-5 h-5" />
                     </button>
                 </div>
+            </div>
+        </div>
+    )
+}
+
+// ---------------------------------------------------------------------------------------------------
+// TAB: CALENDARIO (solo Ministerio de Alabanza) — asigna cantantes/músicos
+// por servicio (cada servicio ya distingue jueves de domingo por sí solo).
+// ---------------------------------------------------------------------------------------------------
+function CalendarTab({ group, canManage, color, gradient }) {
+    const [services, setServices] = useState([])
+    const [eligibleMembers, setEligibleMembers] = useState([])
+    const [assignmentsByService, setAssignmentsByService] = useState({})
+
+    useEffect(() => {
+        refreshServices()
+        setEligibleMembers(getMembers().filter(m => m.is_active && m[group.field]))
+    }, [group.field])
+
+    const refreshServices = () => {
+        const upcoming = getServices()
+            .filter(s => s.service_type === 'sunday' || s.service_type === 'thursday')
+            .sort((a, b) => new Date(b.service_date) - new Date(a.service_date))
+        setServices(upcoming)
+        const byService = {}
+        upcoming.forEach(s => { byService[s.id] = getAlabanzaAssignmentsForService(s.id) })
+        setAssignmentsByService(byService)
+    }
+
+    const handleAssign = (serviceId, roleId, memberId) => {
+        setAlabanzaAssignment(serviceId, roleId, memberId || null)
+        setAssignmentsByService(prev => ({
+            ...prev,
+            [serviceId]: [
+                ...(prev[serviceId] || []).filter(a => a.role_id !== roleId),
+                ...(memberId ? [{ id: `alab-${serviceId}-${roleId}`, service_id: serviceId, role_id: roleId, member_id: memberId }] : []),
+            ],
+        }))
+    }
+
+    const formatServiceDate = (dateStr) => {
+        const [year, month, day] = dateStr.split('-').map(Number)
+        const date = new Date(year, month - 1, day)
+        return date.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })
+    }
+
+    return (
+        <div className="space-y-4 animate-fade-in">
+            {!canManage && (
+                <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[#E8F4FC] text-[#111111] text-sm">
+                    <Calendar className="w-4 h-4 text-[#2696D2] flex-shrink-0" />
+                    Solo el líder del ministerio o un administrador puede editar las asignaciones.
+                </div>
+            )}
+
+            {services.length === 0 ? (
+                <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] p-12 text-center text-[#6E6E6E]">
+                    <Calendar className="w-12 h-12 mx-auto mb-3 text-[#6E6E6E]/20" />
+                    <p className="text-lg font-medium">No hay servicios creados todavía</p>
+                    <p className="text-sm mt-1">Los servicios (jueves y domingo) se crean desde Servicios.</p>
+                </div>
+            ) : (
+                services.map(service => {
+                    const assignments = assignmentsByService[service.id] || []
+                    const assignedMemberId = (roleId) => assignments.find(a => a.role_id === roleId)?.member_id || ''
+
+                    return (
+                        <div key={service.id} className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] overflow-hidden">
+                            <div className="px-6 py-4 flex items-center justify-between" style={{ background: gradient }}>
+                                <div>
+                                    <p className="text-white font-semibold capitalize">{formatServiceDate(service.service_date)}</p>
+                                    <p className="text-white/70 text-xs">{service.service_type === 'thursday' ? 'Culto de Jueves' : 'Culto de Domingo'} · {service.name}</p>
+                                </div>
+                                {service.is_active && (
+                                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-white/20 text-white">Activo</span>
+                                )}
+                            </div>
+                            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {ALABANZA_ROLES.map(role => (
+                                    <div key={role.id}>
+                                        <label className="block text-xs font-medium text-[#6E6E6E] mb-1">{role.label}</label>
+                                        {canManage ? (
+                                            <select
+                                                value={assignedMemberId(role.id)}
+                                                onChange={(e) => handleAssign(service.id, role.id, e.target.value)}
+                                                className="w-full px-3 py-2 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] text-sm cursor-pointer"
+                                            >
+                                                <option value="">Sin asignar</option>
+                                                {eligibleMembers.map(m => (
+                                                    <option key={m.id} value={m.id}>{m.full_name}</option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <p className="text-sm text-[#111111] font-medium px-3 py-2 rounded-xl bg-gray-50/50">
+                                                {eligibleMembers.find(m => m.id === assignedMemberId(role.id))?.full_name || 'Sin asignar'}
+                                            </p>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )
+                })
+            )}
+        </div>
+    )
+}
+
+// ---------------------------------------------------------------------------------------------------
+// TAB: REPERTORIO (solo Ministerio de Alabanza) — cifrados en texto plano
+// con transposición de tonalidad en el navegador (sin audio ni OCR: los
+// acordes ya vienen como texto, ver src/lib/chordTranspose.js).
+// ---------------------------------------------------------------------------------------------------
+function RepertoireTab({ canManage, color }) {
+    const [songs, setSongs] = useState([])
+    const [selectedId, setSelectedId] = useState(null)
+    const [semitones, setSemitones] = useState(0)
+    const [preferFlats, setPreferFlats] = useState(false)
+    const [form, setForm] = useState({ title: '', original_key: '', chord_chart: '' })
+
+    useEffect(() => { refresh() }, [])
+
+    const refresh = () => setSongs(getAlabanzaSongs())
+
+    const selectedSong = songs.find(s => s.id === selectedId) || null
+
+    const openSong = (id) => { setSelectedId(id); setSemitones(0); setPreferFlats(false) }
+    const closeSong = () => setSelectedId(null)
+
+    const handleCreate = () => {
+        if (!form.title.trim() || !form.chord_chart.trim()) return
+        createAlabanzaSong(form)
+        setForm({ title: '', original_key: '', chord_chart: '' })
+        refresh()
+    }
+
+    const handleDelete = (id) => {
+        deleteAlabanzaSong(id)
+        if (selectedId === id) closeSong()
+        refresh()
+    }
+
+    if (selectedSong) {
+        const transposedChart = transposeChordChart(selectedSong.chord_chart, semitones, preferFlats)
+        const currentKeyLabel = selectedSong.original_key ? transposeKeyLabel(selectedSong.original_key, semitones, preferFlats) : null
+
+        return (
+            <div className="space-y-4 animate-fade-in">
+                <button onClick={closeSong} className="flex items-center gap-1.5 text-sm font-medium text-[#2696D2] hover:underline cursor-pointer">
+                    <ChevronLeft className="w-4 h-4" /> Volver al repertorio
+                </button>
+
+                <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] p-6 space-y-4">
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                        <div>
+                            <h3 className="text-lg font-bold text-[#111111]">{selectedSong.title}</h3>
+                            {currentKeyLabel && (
+                                <p className="text-sm text-[#6E6E6E] mt-1">
+                                    Tonalidad: <span className="font-semibold" style={{ color }}>{currentKeyLabel}</span>
+                                    {semitones !== 0 && <span className="text-xs text-[#6E6E6E]"> (original {selectedSong.original_key})</span>}
+                                </p>
+                            )}
+                        </div>
+                        {canManage && (
+                            <button onClick={() => handleDelete(selectedSong.id)}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-[#E74C3C] hover:bg-[#FADBD8] transition-colors cursor-pointer">
+                                <Trash2 className="w-4 h-4" /> Eliminar
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-3 flex-wrap p-3 rounded-xl bg-gray-50/80">
+                        <span className="text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider">Transportar</span>
+                        <button onClick={() => setSemitones(s => s - 1)}
+                            className="w-9 h-9 rounded-lg flex items-center justify-center border border-gray-200 bg-white hover:bg-gray-50 transition-colors cursor-pointer">
+                            <MinusCircle className="w-4 h-4" style={{ color }} />
+                        </button>
+                        <span className="text-sm font-bold text-[#111111] w-10 text-center">{semitones > 0 ? `+${semitones}` : semitones}</span>
+                        <button onClick={() => setSemitones(s => s + 1)}
+                            className="w-9 h-9 rounded-lg flex items-center justify-center border border-gray-200 bg-white hover:bg-gray-50 transition-colors cursor-pointer">
+                            <PlusCircle className="w-4 h-4" style={{ color }} />
+                        </button>
+                        {semitones !== 0 && (
+                            <button onClick={() => setSemitones(0)} className="text-xs text-[#6E6E6E] hover:text-[#111111] underline cursor-pointer">
+                                Restablecer
+                            </button>
+                        )}
+                        <label className="flex items-center gap-1.5 text-xs text-[#6E6E6E] cursor-pointer sm:ml-auto">
+                            <input type="checkbox" checked={preferFlats} onChange={(e) => setPreferFlats(e.target.checked)} className="accent-[#2696D2] cursor-pointer" />
+                            Usar bemoles (b) en vez de sostenidos (#)
+                        </label>
+                    </div>
+
+                    <pre className="bg-gray-50/80 rounded-xl p-4 overflow-x-auto text-sm font-mono leading-relaxed text-[#111111]">{transposedChart}</pre>
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-6 animate-fade-in">
+            {canManage && (
+                <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] p-6">
+                    <h3 className="text-lg font-semibold text-[#111111] mb-4 flex items-center gap-2">
+                        <Plus className="w-5 h-5" style={{ color }} /> Agregar Canción al Repertorio
+                    </h3>
+                    <div className="space-y-4">
+                        <div className="flex flex-col sm:flex-row gap-4">
+                            <input
+                                type="text"
+                                placeholder="Título de la canción..."
+                                value={form.title}
+                                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                                className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-100 hover:border-gray-200 focus:border-[#2696D2] focus:outline-none transition-colors text-sm font-medium"
+                            />
+                            <select
+                                value={form.original_key}
+                                onChange={e => setForm(f => ({ ...f, original_key: e.target.value }))}
+                                className="px-4 py-3 rounded-xl border-2 border-gray-100 hover:border-gray-200 focus:border-[#2696D2] focus:outline-none transition-colors text-sm cursor-pointer"
+                            >
+                                <option value="">Tonalidad original (opcional)</option>
+                                {KEY_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
+                            </select>
+                        </div>
+                        <textarea
+                            placeholder={'Pega aquí el cifrado (acordes sobre la letra), por ejemplo:\n\n  B              F#  E     B\nNo existen más motivos Señor'}
+                            value={form.chord_chart}
+                            onChange={e => setForm(f => ({ ...f, chord_chart: e.target.value }))}
+                            rows={8}
+                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 hover:border-gray-200 focus:border-[#2696D2] focus:outline-none transition-colors text-sm font-mono resize-y"
+                        />
+                        <div className="flex justify-end">
+                            <button
+                                onClick={handleCreate}
+                                disabled={!form.title.trim() || !form.chord_chart.trim()}
+                                className="px-5 py-2.5 rounded-xl font-medium text-white text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer shadow-md"
+                                style={{ background: color }}
+                            >
+                                <Plus className="w-4 h-4" /> Agregar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100">
+                    <h3 className="text-lg font-semibold text-[#111111]">Repertorio</h3>
+                </div>
+                {songs.length === 0 ? (
+                    <div className="p-12 text-center text-[#6E6E6E]">
+                        <ListMusic className="w-12 h-12 mx-auto mb-3 text-[#6E6E6E]/20" />
+                        <p className="text-lg font-medium">Todavía no hay canciones en el repertorio</p>
+                    </div>
+                ) : (
+                    <div className="divide-y divide-gray-50">
+                        {songs.map(song => (
+                            <button key={song.id} onClick={() => openSong(song.id)}
+                                className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50/50 transition-colors cursor-pointer text-left">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-white flex-shrink-0" style={{ background: color }}>
+                                        <ListMusic className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-[#111111]">{song.title}</p>
+                                        {song.original_key && <p className="text-xs text-[#6E6E6E]">Tonalidad original: {song.original_key}</p>}
+                                    </div>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     )

@@ -1075,6 +1075,85 @@ export function sendGroupMessage(data) {
     return newMessage
 }
 
+// Calendario de asignaciones del Ministerio de Alabanza: un rol (Voz
+// Masculina, Guitarra, etc.) asignado a un miembro para un servicio
+// específico (service_id ya distingue jueves de domingo por sí solo, así
+// que no hace falta modelar "semana" — cada servicio tiene su propia
+// asignación por rol).
+export const ALABANZA_ROLES = [
+    { id: 'voz_masculina', label: 'Voz Masculina' },
+    { id: 'voz_femenina_1', label: 'Voz Femenina' },
+    { id: 'voz_femenina_2', label: 'Voz Femenina 2' },
+    { id: 'guitarra', label: 'Guitarra Ac.' },
+    { id: 'bateria', label: 'Batería' },
+]
+
+let ALABANZA_ASSIGNMENTS = []
+
+export function getAlabanzaAssignments() { return [...ALABANZA_ASSIGNMENTS] }
+
+export function getAlabanzaAssignmentsForService(serviceId) {
+    return ALABANZA_ASSIGNMENTS.filter(a => a.service_id === serviceId)
+}
+
+// memberId === null borra la asignación (deja el rol "Sin asignar").
+export function setAlabanzaAssignment(serviceId, roleId, memberId) {
+    const index = ALABANZA_ASSIGNMENTS.findIndex(a => a.service_id === serviceId && a.role_id === roleId)
+
+    if (!memberId) {
+        if (index === -1) return
+        const existing = ALABANZA_ASSIGNMENTS[index]
+        ALABANZA_ASSIGNMENTS = ALABANZA_ASSIGNMENTS.filter((_, i) => i !== index)
+        deleteDoc(doc(db, 'alabanzaAssignments', existing.id)).catch(err => console.error('No se pudo borrar la asignación de alabanza', err))
+        return
+    }
+
+    if (index !== -1) {
+        const updated = { ...ALABANZA_ASSIGNMENTS[index], member_id: memberId }
+        ALABANZA_ASSIGNMENTS = ALABANZA_ASSIGNMENTS.map((a, i) => (i === index ? updated : a))
+        updateDoc(doc(db, 'alabanzaAssignments', updated.id), { member_id: memberId }).catch(err => console.error('No se pudo sincronizar la asignación de alabanza', err))
+        return
+    }
+
+    const id = `alab-${serviceId}-${roleId}`
+    const newAssignment = { id, service_id: serviceId, role_id: roleId, member_id: memberId }
+    ALABANZA_ASSIGNMENTS = [...ALABANZA_ASSIGNMENTS, newAssignment]
+    setDoc(doc(db, 'alabanzaAssignments', id), { service_id: serviceId, role_id: roleId, member_id: memberId }).catch(err => console.error('No se pudo sincronizar la asignación de alabanza', err))
+}
+
+// Repertorio de canciones del Ministerio de Alabanza: cifrado en texto
+// plano (acordes sobre la letra) + tonalidad original opcional. La
+// transposición se hace en el cliente con src/lib/chordTranspose.js — no
+// se guarda transpuesto, solo el original.
+let ALABANZA_SONGS = []
+
+export function getAlabanzaSongs() {
+    return [...ALABANZA_SONGS].sort((a, b) => a.title.localeCompare(b.title, 'es'))
+}
+
+export function createAlabanzaSong({ title, original_key, chord_chart }) {
+    const id = `song-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    const newSong = { id, title, original_key: original_key || '', chord_chart, created_at: new Date().toISOString() }
+    ALABANZA_SONGS = [...ALABANZA_SONGS, newSong]
+    const { id: _id, ...rest } = newSong
+    setDoc(doc(db, 'alabanzaSongs', id), rest).catch(err => console.error('No se pudo sincronizar la canción', err))
+    return newSong
+}
+
+export function updateAlabanzaSong(id, patch) {
+    const index = ALABANZA_SONGS.findIndex(s => s.id === id)
+    if (index === -1) return null
+    const updated = { ...ALABANZA_SONGS[index], ...patch }
+    ALABANZA_SONGS = ALABANZA_SONGS.map((s, i) => (i === index ? updated : s))
+    updateDoc(doc(db, 'alabanzaSongs', id), patch).catch(err => console.error('No se pudo sincronizar la canción', err))
+    return updated
+}
+
+export function deleteAlabanzaSong(id) {
+    ALABANZA_SONGS = ALABANZA_SONGS.filter(s => s.id !== id)
+    deleteDoc(doc(db, 'alabanzaSongs', id)).catch(err => console.error('No se pudo borrar la canción', err))
+}
+
 export function getMemberEscuelaProgress(memberId) {
     const enrollments = getEscuelaEnrollments();
     const enrolled = enrollments.find(e => e.member_id === memberId);
@@ -1639,5 +1718,20 @@ export function startCoreDataSync() {
         console.error('Error sincronizando asistencias', err)
         attendancesFirstLoad = false
         checkCoreDataReady()
+    })
+
+    // No bloquean checkCoreDataReady: son datos secundarios (calendario y
+    // repertorio de Alabanza), no algo que el resto de la app necesite para
+    // arrancar.
+    onSnapshot(collection(db, 'alabanzaAssignments'), (snap) => {
+        ALABANZA_ASSIGNMENTS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    }, (err) => {
+        console.error('Error sincronizando asignaciones de alabanza', err)
+    })
+
+    onSnapshot(collection(db, 'alabanzaSongs'), (snap) => {
+        ALABANZA_SONGS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    }, (err) => {
+        console.error('Error sincronizando repertorio de alabanza', err)
     })
 }
