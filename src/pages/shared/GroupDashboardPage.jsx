@@ -5,7 +5,7 @@ import {
     OPERATIONAL_GROUPS, getMembers, patchMember,
     getGroupNotices, createGroupNotice,
     getGroupMessages, sendGroupMessage,
-    getUpcomingServices, ALABANZA_ROLES, getAlabanzaAssignmentsForService, setAlabanzaAssignment,
+    getUpcomingAlabanzaOccasions, ALABANZA_ROLES, getAlabanzaAssignmentsForService, setAlabanzaAssignment,
     getAlabanzaSongs, createAlabanzaSong, updateAlabanzaSong, deleteAlabanzaSong,
     getSetlistForService, addSongToSetlist, removeSongFromSetlist, setSetlistPerformer
 } from '../../data/mockData.js'
@@ -603,7 +603,7 @@ function CalendarTab({ group, canManage, color, gradient }) {
     }, [group.field])
 
     const refreshServices = () => {
-        const upcoming = getUpcomingServices(8)
+        const upcoming = getUpcomingAlabanzaOccasions(8)
         setServices(upcoming)
         const byService = {}
         const setlists = {}
@@ -661,14 +661,7 @@ function CalendarTab({ group, canManage, color, gradient }) {
                 </div>
             )}
 
-            {services.length === 0 ? (
-                <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] p-12 text-center text-[#6E6E6E]">
-                    <Calendar className="w-12 h-12 mx-auto mb-3 text-[#6E6E6E]/20" />
-                    <p className="text-lg font-medium">No hay próximos servicios creados</p>
-                    <p className="text-sm mt-1">Los servicios (jueves y domingo) se crean desde Servicios.</p>
-                </div>
-            ) : (
-                services.map(service => {
+            {services.map(service => {
                     const assignments = assignmentsByService[service.id] || []
                     const assignedMemberId = (roleId) => assignments.find(a => a.role_id === roleId)?.member_id || ''
                     const setlist = setlistByService[service.id] || []
@@ -677,14 +670,9 @@ function CalendarTab({ group, canManage, color, gradient }) {
 
                     return (
                         <div key={service.id} className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] overflow-hidden">
-                            <div className="px-6 py-4 flex items-center justify-between" style={{ background: gradient }}>
-                                <div>
-                                    <p className="text-white font-semibold capitalize">{formatServiceDate(service.service_date)}</p>
-                                    <p className="text-white/70 text-xs">{service.service_type === 'thursday' ? 'Culto de Jueves' : 'Culto de Domingo'} · {service.name}</p>
-                                </div>
-                                {service.is_active && (
-                                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-white/20 text-white">Activo</span>
-                                )}
+                            <div className="px-6 py-4" style={{ background: gradient }}>
+                                <p className="text-white font-semibold capitalize">{formatServiceDate(service.service_date)}</p>
+                                <p className="text-white/70 text-xs">{service.service_type === 'thursday' ? 'Culto de Jueves' : 'Culto de Domingo'}</p>
                             </div>
                             <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {ALABANZA_ROLES.map(role => (
@@ -762,8 +750,7 @@ function CalendarTab({ group, canManage, color, gradient }) {
                             </div>
                         </div>
                     )
-                })
-            )}
+                })}
         </div>
     )
 }
@@ -819,7 +806,7 @@ function RepertoireTab({ group, canManage, color }) {
     useEffect(() => {
         refresh()
         setEligibleMembers(getMembers().filter(m => m.is_active && m[group.field]))
-        const upcoming = getUpcomingServices(8)
+        const upcoming = getUpcomingAlabanzaOccasions(8)
         setUpcomingServices(upcoming)
         setFilterServiceId(upcoming[0]?.id || '')
     }, [group.field])

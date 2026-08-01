@@ -230,27 +230,29 @@ export function toggleMemberActive(id) {
 
 export function getServices() { return [...SERVICES] }
 
-// Próximos servicios (jueves/domingo) desde hoy en adelante, ordenados por
-// fecha ascendente. Se usa para que los ministerios (ej. Alabanza) puedan
-// mostrar con anticipación lo que viene, en vez de todo el historial.
-export function getUpcomingServices(limit = 8) {
-    // "Hoy" en fecha LOCAL (no UTC): service_date se guarda con los
-    // componentes locales de la fecha (ver getCurrentWeekDate en
-    // ServicesPage.jsx), así que comparar contra un "hoy" en UTC corre
-    // desfasado en zonas horarias negativas (ej. Bolivia, UTC-4) durante la
-    // noche, ocultando servicios de hoy por error.
-    const now = new Date()
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    return SERVICES
-        // Un service_type ausente se trata como 'sunday', igual que en
-        // ServicesPage.jsx — si no, servicios antiguos sin ese campo
-        // desaparecen del calendario aunque sí existan.
-        .filter(s => {
-            const type = s.service_type || 'sunday'
-            return (type === 'sunday' || type === 'thursday') && s.service_date >= todayStr
-        })
-        .sort((a, b) => new Date(a.service_date) - new Date(b.service_date))
-        .slice(0, limit)
+function localDateStr(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+// Próximas "ocasiones" de jueves y domingo, calculadas directamente por
+// fecha — NO dependen de que exista un registro creado en el módulo
+// Servicios. Cada ocasión usa un id determinístico ("2026-08-06_thursday")
+// para que el calendario/repertorio de un ministerio (ej. Alabanza) sea un
+// sistema aparte, independiente de si alguien creó el servicio formal o no.
+export function getUpcomingAlabanzaOccasions(count = 8) {
+    const occasions = []
+    const current = new Date()
+    current.setHours(0, 0, 0, 0)
+    while (occasions.length < count) {
+        const day = current.getDay() // 0=domingo, 4=jueves
+        if (day === 0 || day === 4) {
+            const dateStr = localDateStr(current)
+            const type = day === 0 ? 'sunday' : 'thursday'
+            occasions.push({ id: `${dateStr}_${type}`, service_date: dateStr, service_type: type })
+        }
+        current.setDate(current.getDate() + 1)
+    }
+    return occasions
 }
 
 // Cada tipo de servicio (domingo, jueves) tiene su propio servicio "activo",
