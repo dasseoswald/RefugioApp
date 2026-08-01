@@ -380,6 +380,24 @@ export function getVisitorsDueWelcomeThisWeek() {
         .sort((a, b) => new Date(b.achievedAt) - new Date(a.achievedAt))
 }
 
+// Visitantes cuya PRIMERA asistencia registrada ocurrió en el servicio
+// activo de hoy — para la presentación de bienvenida del Equipo de
+// Bienvenida durante el culto. Si ya tenían asistencias previas (no es su
+// primera vez), no aparecen aquí aunque hayan asistido hoy.
+export function getNewVisitorsForActiveService() {
+    const activeService = getActiveService()
+    if (!activeService) return []
+    return getAttendancesByService(activeService.id)
+        .map(att => {
+            const member = getMemberById(att.member_id)
+            if (!member || member.member_type !== 'Visitante') return null
+            const allAttendances = getAttendancesByMember(member.id)
+            const isFirstEver = allAttendances.length === 1 && allAttendances[0].service_id === activeService.id
+            return isFirstEver ? member : null
+        })
+        .filter(Boolean)
+}
+
 export function findAttendanceByMemberAndService(memberId, serviceId) {
     return ATTENDANCES.find(a => a.member_id === memberId && a.service_id === serviceId && !a.is_cancelled) || null
 }

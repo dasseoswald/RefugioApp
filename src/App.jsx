@@ -26,6 +26,7 @@ import RadioPage from './pages/shared/RadioPage.jsx'
 import BibliaPage from './pages/shared/BibliaPage.jsx'
 import ForumPage from './pages/shared/ForumPage.jsx'
 import FinanzasPage from './pages/tesorero/FinanzasPage.jsx'
+import PresentationPage from './pages/PresentationPage.jsx'
 import OnboardingPrompt from './components/shared/OnboardingPrompt.jsx'
 import SetPasswordPrompt from './components/shared/SetPasswordPrompt.jsx'
 import { OPERATIONAL_GROUPS } from './data/mockData.js'
@@ -241,6 +242,14 @@ export default function App() {
             <Route path="/:role/grupos/:groupId" element={
                 <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero']}>
                     <AppLayout><GroupDashboardPage /></AppLayout>
+                </ProtectedRoute>
+            } />
+
+            {/* Presentación en vivo (Equipo de Bienvenida): pantalla completa,
+                sin sidebar, pensada para proyectar durante el culto */}
+            <Route path="/presentacion" element={
+                <ProtectedRoute allowedRoles={['admin', 'controller']}>
+                    <PresentationPage />
                 </ProtectedRoute>
             } />
 

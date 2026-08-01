@@ -10,7 +10,7 @@ import {
     CalendarDays, LogOut, Shield,
     UserCheck, BookOpen, Sprout, ChevronDown, ChevronRight,
     UserCircle, UserSquare, Baby, Music, Layers, Megaphone, HandHeart, PartyPopper,
-    Menu, X, MessageCircle, Radio, Share2, Check, Facebook, Instagram, Landmark, MessageCircleQuestion
+    Menu, X, MessageCircle, Radio, Share2, Check, Facebook, Instagram, Landmark, MessageCircleQuestion, Projector
 } from 'lucide-react'
 
 const INSTAGRAM_URL = 'https://www.instagram.com/unrefugioparalafamilia/'
@@ -33,6 +33,7 @@ const NAV_CONFIG = {
         { to: '/admin/users', icon: Shield, label: 'Usuarios' },
         { to: '/admin/mensajes', icon: Megaphone, label: 'Mensajes' },
         { to: '/admin/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
+        { to: '/presentacion', icon: Projector, label: 'Presentación' },
         { to: '/admin/eventos', icon: PartyPopper, label: 'Eventos' },
         { to: '/admin/chat', icon: MessageCircle, label: 'Chat en Vivo' },
         { to: '/admin/foro', icon: MessageCircleQuestion, label: 'Foro' },
@@ -45,6 +46,7 @@ const NAV_CONFIG = {
         { to: '/controller/members', icon: Users, label: 'Miembros' },
         { to: '/controller/reports', icon: BarChart3, label: 'Reportes' },
         { to: '/controller/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
+        { to: '/presentacion', icon: Projector, label: 'Presentación' },
         { to: '/controller/eventos', icon: PartyPopper, label: 'Eventos' },
         { to: '/controller/chat', icon: MessageCircle, label: 'Chat en Vivo' },
         { to: '/controller/foro', icon: MessageCircleQuestion, label: 'Foro' },
