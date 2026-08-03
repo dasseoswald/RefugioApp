@@ -302,12 +302,19 @@ export function getUpcomingAlabanzaOccasions(count = 8) {
 // independiente del otro. Si no se pide un tipo puntual, se adivina según el
 // día de hoy (domingo=0, jueves=4); fuera de esos días, cae al comportamiento
 // anterior (cualquier servicio activo).
+//
+// Un service_type ausente se trata como 'sunday' (igual que en
+// ServicesPage.jsx) — servicios creados antes de que existiera ese campo no
+// lo tienen guardado. Sin este default, un domingo "sin tipo" nunca matchea
+// expectedType==='sunday', cae al fallback de "cualquier servicio activo" y
+// puede devolver por error un jueves activo en su lugar (jueves y domingo
+// pueden estar activos al mismo tiempo, así que ese fallback es ambiguo).
 export function getActiveService(type) {
-    if (type) return SERVICES.find(s => s.is_active && s.service_type === type) || null
+    if (type) return SERVICES.find(s => s.is_active && (s.service_type || 'sunday') === type) || null
     const day = new Date().getDay()
     const expectedType = day === 0 ? 'sunday' : day === 4 ? 'thursday' : null
     if (expectedType) {
-        const match = SERVICES.find(s => s.is_active && s.service_type === expectedType)
+        const match = SERVICES.find(s => s.is_active && (s.service_type || 'sunday') === expectedType)
         if (match) return match
     }
     return SERVICES.find(s => s.is_active) || SERVICES[0]
