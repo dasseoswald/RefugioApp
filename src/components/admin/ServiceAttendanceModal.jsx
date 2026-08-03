@@ -6,6 +6,7 @@ import {
     getNewVisitorsForService, getPrayerRequestsByService,
 } from '../../data/mockData.js'
 import { Search, Users, CheckCircle2, Circle, User, UserPlus, Sparkles, HandHeart, Heart, RefreshCw } from 'lucide-react'
+import MemberAutocomplete from '../shared/MemberAutocomplete.jsx'
 
 export default function ServiceAttendanceModal({ isOpen, onClose, service }) {
     const { user } = useAuth()
@@ -15,6 +16,8 @@ export default function ServiceAttendanceModal({ isOpen, onClose, service }) {
     const [attendances, setAttendances] = useState(() => getAttendancesByService(service.id))
     const [newVisitors, setNewVisitors] = useState(() => getNewVisitorsForService(service.id))
     const [newVisitorForm, setNewVisitorForm] = useState({ full_name: '', phone: '', gender: 'M', notes: '' })
+    const [invitedByName, setInvitedByName] = useState('')
+    const [invitedById, setInvitedById] = useState(null)
     const [prayerRequests, setPrayerRequests] = useState(() => getPrayerRequestsByService(service.id))
 
     // Otros controladores pueden estar registrando peticiones/visitantes al
@@ -56,11 +59,18 @@ export default function ServiceAttendanceModal({ isOpen, onClose, service }) {
         if (newVisitorForm.notes.trim()) {
             addProfileNote(newMember.id, user?.name || 'Equipo de Bienvenida', newVisitorForm.notes.trim())
         }
+        // Historial de invitados: queda en la ficha de quien invitó, no en la
+        // del visitante, para poder llevar la cuenta de a cuántos ha traído.
+        if (invitedById) {
+            addProfileNote(invitedById, user?.name || 'Equipo de Bienvenida', `Invitó a ${newMember.full_name} como visitante nuevo`)
+        }
 
         setMembers(getMembers().filter(m => m.is_active).sort((a, b) => a.full_name.localeCompare(b.full_name)))
         setAttendances(getAttendancesByService(service.id))
         setNewVisitors(getNewVisitorsForService(service.id))
         setNewVisitorForm({ full_name: '', phone: '', gender: 'M', notes: '' })
+        setInvitedByName('')
+        setInvitedById(null)
     }
 
     return (
@@ -206,6 +216,15 @@ export default function ServiceAttendanceModal({ isOpen, onClose, service }) {
                             <option value="Otro">Otro</option>
                         </select>
                     </div>
+                    <MemberAutocomplete
+                        value={invitedByName}
+                        onChange={setInvitedByName}
+                        onSelectMember={(member) => setInvitedById(member?.id || null)}
+                        placeholder="Invitado de... (opcional) — busca al miembro que lo trajo"
+                    />
+                    {invitedByName.trim() && !invitedById && (
+                        <p className="text-xs text-[#E8A838] -mt-1">Elige a la persona de la lista de sugerencias para que quede registrado en su ficha</p>
+                    )}
                     <textarea
                         value={newVisitorForm.notes}
                         onChange={(e) => setNewVisitorForm(f => ({ ...f, notes: e.target.value }))}

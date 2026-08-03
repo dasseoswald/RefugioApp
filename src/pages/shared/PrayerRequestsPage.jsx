@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { getPrayerRequests, createPrayerRequest, markPrayerAnswered, getActiveService, getGratitudeForPrayer } from '../../data/mockData.js'
+import { getPrayerRequests, createPrayerRequest, markPrayerAnswered, getActiveService, getGratitudeForPrayer, addProfileNote } from '../../data/mockData.js'
 import Modal from '../../components/ui/Modal.jsx'
+import MemberAutocomplete from '../../components/shared/MemberAutocomplete.jsx'
 import {
     HandHeart, Heart, Send, CheckCircle2, Sparkles, Calendar, Filter
 } from 'lucide-react'
@@ -14,6 +15,8 @@ export default function PrayerRequestsPage() {
     const [filterStatus, setFilterStatus] = useState('')
     const [composeType, setComposeType] = useState('oracion')
     const [content, setContent] = useState('')
+    const [nameInput, setNameInput] = useState(user?.name || '')
+    const [selectedMemberId, setSelectedMemberId] = useState(user?.member_id || null)
     const [notification, setNotification] = useState(null)
     const [answeringPrayer, setAnsweringPrayer] = useState(null)
     const [gratitudeText, setGratitudeText] = useState('')
@@ -33,14 +36,20 @@ export default function PrayerRequestsPage() {
     }
 
     const handleSubmit = () => {
-        if (!content.trim()) return
+        if (!content.trim() || !nameInput.trim()) return
         createPrayerRequest({
             service_id: activeService?.id || null,
-            member_id: user?.member_id || null,
-            author_name: user?.name,
+            member_id: selectedMemberId || null,
+            author_name: nameInput.trim(),
             type: composeType,
             content: content.trim(),
         })
+        // Deja registro histórico en la ficha del miembro, si la petición
+        // quedó asociada a uno (autocompletar seleccionado).
+        if (selectedMemberId) {
+            const label = composeType === 'oracion' ? 'Petición de oración' : 'Agradecimiento'
+            addProfileNote(selectedMemberId, user?.name || 'Sistema', `${label}: ${content.trim()}`)
+        }
         setContent('')
         refreshData()
         showNotification(composeType === 'oracion' ? 'Petición de oración enviada' : 'Gratitud compartida')
@@ -108,6 +117,18 @@ export default function PrayerRequestsPage() {
                         <Heart className="w-4 h-4" /> Gratitud
                     </button>
                 </div>
+                <div>
+                    <label className="block text-sm font-medium text-[#111111] mb-1.5">Nombre</label>
+                    <MemberAutocomplete
+                        value={nameInput}
+                        onChange={setNameInput}
+                        onSelectMember={(member) => setSelectedMemberId(member?.id || null)}
+                        placeholder="Busca un miembro o escribe un nombre..."
+                    />
+                    {selectedMemberId && (
+                        <p className="text-xs text-[#13CD68] mt-1">✓ Se guardará también como nota en su ficha de miembro</p>
+                    )}
+                </div>
                 <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3}
                     placeholder={composeType === 'oracion' ? 'Comparte tu petición de oración...' : 'Comparte algo por lo que estás agradecido...'}
                     className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] focus:bg-white transition-all text-sm resize-none" />
@@ -115,7 +136,7 @@ export default function PrayerRequestsPage() {
                     <p className="text-xs text-[#6E6E6E]">
                         {activeService ? `Se vinculará al servicio de hoy — ${activeService.name}` : 'No hay un servicio activo en este momento'}
                     </p>
-                    <button onClick={handleSubmit} disabled={!content.trim()}
+                    <button onClick={handleSubmit} disabled={!content.trim() || !nameInput.trim()}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-medium text-sm transition-all hover:shadow-lg disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                         style={{ background: composeType === 'oracion' ? 'linear-gradient(135deg, #2696D2, #1D74A8)' : 'linear-gradient(135deg, #13CD68, #0FA855)' }}>
                         <Send className="w-4 h-4" /> Enviar
