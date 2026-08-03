@@ -1,15 +1,17 @@
 import { useState, useMemo } from 'react'
 import Modal from '../ui/Modal.jsx'
-import { getMembers, createMember, getAttendancesByService, registerAttendance, cancelAttendance, findAttendanceByMemberAndService } from '../../data/mockData.js'
+import { useAuth } from '../../context/AuthContext.jsx'
+import { getMembers, createMember, getAttendancesByService, registerAttendance, cancelAttendance, findAttendanceByMemberAndService, addProfileNote } from '../../data/mockData.js'
 import { Search, Users, CheckCircle2, Circle, User, UserPlus, Sparkles } from 'lucide-react'
 
 export default function ServiceAttendanceModal({ isOpen, onClose, service }) {
+    const { user } = useAuth()
     const [activeTab, setActiveTab] = useState('miembros')
     const [searchTerm, setSearchTerm] = useState('')
     const [members, setMembers] = useState(() => getMembers().filter(m => m.is_active).sort((a, b) => a.full_name.localeCompare(b.full_name)))
     const [attendances, setAttendances] = useState(() => getAttendancesByService(service.id))
     const [newVisitorIds, setNewVisitorIds] = useState([])
-    const [newVisitorForm, setNewVisitorForm] = useState({ full_name: '', phone: '', gender: 'M' })
+    const [newVisitorForm, setNewVisitorForm] = useState({ full_name: '', phone: '', gender: 'M', notes: '' })
 
     const filteredMembers = members.filter(m =>
         m.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -41,11 +43,14 @@ export default function ServiceAttendanceModal({ isOpen, onClose, service }) {
             groups: [],
         })
         registerAttendance(newMember.id, service.id, 'manual')
+        if (newVisitorForm.notes.trim()) {
+            addProfileNote(newMember.id, user?.name || 'Equipo de Bienvenida', newVisitorForm.notes.trim())
+        }
 
         setMembers(getMembers().filter(m => m.is_active).sort((a, b) => a.full_name.localeCompare(b.full_name)))
         setAttendances(getAttendancesByService(service.id))
         setNewVisitorIds(prev => [newMember.id, ...prev])
-        setNewVisitorForm({ full_name: '', phone: '', gender: 'M' })
+        setNewVisitorForm({ full_name: '', phone: '', gender: 'M', notes: '' })
     }
 
     return (
@@ -186,6 +191,13 @@ export default function ServiceAttendanceModal({ isOpen, onClose, service }) {
                             <option value="Otro">Otro</option>
                         </select>
                     </div>
+                    <textarea
+                        value={newVisitorForm.notes}
+                        onChange={(e) => setNewVisitorForm(f => ({ ...f, notes: e.target.value }))}
+                        placeholder="Notas (opcional) — observaciones sobre el visitante..."
+                        rows={2}
+                        className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-white focus:outline-none focus:border-[#2696D2] text-sm resize-none"
+                    />
                     <button
                         onClick={handleAddVisitor}
                         disabled={!newVisitorForm.full_name.trim()}

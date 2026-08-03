@@ -124,7 +124,8 @@ function CategoryPicker({ categories, onSelect, onExit }) {
     return (
         <div className="min-h-screen flex flex-col items-center justify-center px-8 py-12 relative">
             <button onClick={onExit}
-                className="absolute top-6 left-6 flex items-center gap-2 text-white/60 hover:text-white transition-colors cursor-pointer text-sm font-medium">
+                style={{ top: 'max(1.5rem, calc(env(safe-area-inset-top) + 0.75rem))' }}
+                className="absolute left-6 flex items-center gap-2 text-white/60 hover:text-white transition-colors cursor-pointer text-sm font-medium">
                 <X className="w-5 h-5" /> Salir
             </button>
             <div className="flex items-center gap-2 mb-2">
@@ -157,7 +158,8 @@ function Slideshow({ category, slides, index, onNext, onPrev, onBack, isFullscre
     return (
         <div className="min-h-screen flex flex-col">
             {/* Barra superior */}
-            <div className="flex items-center justify-between p-6">
+            <div className="flex items-center justify-between px-6 pb-6"
+                style={{ paddingTop: 'max(1.5rem, calc(env(safe-area-inset-top) + 0.75rem))' }}>
                 <button onClick={onBack}
                     className="flex items-center gap-2 text-white/60 hover:text-white transition-colors cursor-pointer text-sm font-medium">
                     <ArrowLeft className="w-5 h-5" /> Volver
@@ -210,7 +212,8 @@ function Slideshow({ category, slides, index, onNext, onPrev, onBack, isFullscre
                     </div>
 
                     {/* Controles de avance */}
-                    <div className="flex items-center justify-center gap-6 p-8">
+                    <div className="flex items-center justify-center gap-6 px-8 pt-8"
+                        style={{ paddingBottom: 'max(2rem, calc(env(safe-area-inset-bottom) + 1rem))' }}>
                         <button onClick={onPrev} disabled={index === 0}
                             className="w-14 h-14 rounded-full flex items-center justify-center bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed">
                             <ArrowLeft className="w-6 h-6" />

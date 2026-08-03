@@ -228,6 +228,49 @@ export function toggleMemberActive(id) {
     return patchMember(id, { is_active: !member.is_active })
 }
 
+// Borrado permanente de un miembro (solo administradores). Limpia también
+// lo que quedaría huérfano: sus asistencias y hoja de vida en Firestore, sus
+// inscripciones/asistencias de Escuela del Discípulo y Refugios (aún locales),
+// sus notas de perfil, y desvincula (sin borrar) cualquier cuenta de usuario
+// que apuntara a este miembro para que no quede rota.
+export function deleteMember(id) {
+    const index = MEMBERS.findIndex(m => m.id === id)
+    if (index === -1) return false
+    MEMBERS = MEMBERS.filter(m => m.id !== id)
+    deleteDoc(memberDocRef(id)).catch(err => console.error('No se pudo eliminar el miembro', err))
+
+    const attendancesToRemove = ATTENDANCES.filter(a => a.member_id === id)
+    ATTENDANCES = ATTENDANCES.filter(a => a.member_id !== id)
+    attendancesToRemove.forEach(a => deleteDoc(attendanceDocRef(a.id)).catch(err => console.error('No se pudo eliminar una asistencia', err)))
+
+    if (MEMBER_PROFILES[id]) {
+        delete MEMBER_PROFILES[id]
+        deleteDoc(doc(db, 'memberProfiles', id)).catch(err => console.error('No se pudo eliminar la hoja de vida', err))
+    }
+
+    for (let i = ESCUELA_ENROLLMENTS.length - 1; i >= 0; i--) {
+        if (ESCUELA_ENROLLMENTS[i].member_id === id) ESCUELA_ENROLLMENTS.splice(i, 1)
+    }
+    for (let i = ESCUELA_ATTENDANCES.length - 1; i >= 0; i--) {
+        if (ESCUELA_ATTENDANCES[i].member_id === id) ESCUELA_ATTENDANCES.splice(i, 1)
+    }
+    for (let i = REFUGIO_ENROLLMENTS.length - 1; i >= 0; i--) {
+        if (REFUGIO_ENROLLMENTS[i].member_id === id) REFUGIO_ENROLLMENTS.splice(i, 1)
+    }
+    for (let i = PROFILE_NOTES.length - 1; i >= 0; i--) {
+        if (PROFILE_NOTES[i].member_id === id) {
+            const [removed] = PROFILE_NOTES.splice(i, 1)
+            deleteDoc(doc(db, 'profileNotes', removed.id)).catch(err => console.error('No se pudo borrar la nota', err))
+        }
+    }
+
+    const linkedUsers = USERS.filter(u => u.member_id === id)
+    USERS = USERS.map(u => (u.member_id === id ? { ...u, member_id: null } : u))
+    linkedUsers.forEach(u => updateDoc(userDocRef(u.id), { member_id: null }).catch(err => console.error('No se pudo desvincular el usuario', err)))
+
+    return true
+}
+
 export function getServices() { return [...SERVICES] }
 
 function localDateStr(date) {
@@ -976,7 +1019,7 @@ let MEMBER_PROFILES = {
     '3': { member_id: '3', address: 'Av. 6 de Agosto #456', occupation: 'Contadora', ministry: 'Liderazgo', baptized: true, baptism_date: '2005-03-15', family_info: 'Esposo: Marcos Torrez, Hija: Camila (15)', emergency_contact: 'Marcos Torrez', emergency_phone: '+591 789-1111', blood_type: 'B+', allergies: 'Ninguna' },
 }
 
-const PROFILE_NOTES = [
+let PROFILE_NOTES = [
     { id: 'note-1', member_id: '1', author: 'Lucía Ramírez', content: 'Interesada en participar en el ministerio de niños a partir del próximo trimestre.', created_at: '2025-12-15T10:30:00' },
     { id: 'note-2', member_id: '1', author: 'Ana Sofía Torrez', content: 'Completó el curso de liderazgo nivel 1. Excelente participación.', created_at: '2026-01-20T14:00:00' },
     { id: 'note-3', member_id: '2', author: 'Lucía Ramírez', content: 'Encargado del equipo de sonido para servicios dominicales.', created_at: '2026-02-10T09:15:00' },
@@ -1001,14 +1044,17 @@ export function getProfileNotes(memberId) {
 }
 
 export function addProfileNote(memberId, authorName, content) {
+    const id = `note-${Date.now()}-${Math.floor(Math.random() * 1000)}`
     const note = {
-        id: `note-${PROFILE_NOTES.length + 1}`,
+        id,
         member_id: memberId,
         author: authorName,
         content,
         created_at: new Date().toISOString(),
     }
     PROFILE_NOTES.push(note)
+    const { id: _id, ...rest } = note
+    setDoc(doc(db, 'profileNotes', id), rest).catch(err => console.error('No se pudo sincronizar la nota', err))
     return { ...note }
 }
 
@@ -1678,6 +1724,7 @@ export const coreDataReadyPromise = new Promise((resolve) => { resolveCoreDataRe
 let membersFirstLoad = true
 let usersFirstLoad = true
 let profilesFirstLoad = true
+let profileNotesFirstLoad = true
 let noticesFirstLoad = true
 let servicesFirstLoad = true
 let attendancesFirstLoad = true
@@ -1753,6 +1800,28 @@ export function startCoreDataSync() {
         console.error('Error sincronizando hojas de vida', err)
         profilesFirstLoad = false
         checkCoreDataReady()
+    })
+
+    // No bloquea checkCoreDataReady: son notas de staff sobre un miembro,
+    // secundarias frente a los datos que el resto de la app necesita para
+    // arrancar (igual que alabanzaAssignments/alabanzaSongs).
+    onSnapshot(collection(db, 'profileNotes'), async (snap) => {
+        if (snap.empty && profileNotesFirstLoad && PROFILE_NOTES.length > 0) {
+            try {
+                const batch = writeBatch(db)
+                PROFILE_NOTES.forEach(n => {
+                    const { id, ...rest } = n
+                    batch.set(doc(db, 'profileNotes', id), rest)
+                })
+                await batch.commit()
+            } catch (e) { console.error('No se pudieron sembrar las notas iniciales', e) }
+            return
+        }
+        PROFILE_NOTES = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        profileNotesFirstLoad = false
+    }, (err) => {
+        console.error('Error sincronizando notas de perfil', err)
+        profileNotesFirstLoad = false
     })
 
     onSnapshot(collection(db, 'groupNotices'), async (snap) => {
