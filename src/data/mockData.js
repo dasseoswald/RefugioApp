@@ -424,21 +424,25 @@ export function getVisitorsDueWelcomeThisWeek() {
 }
 
 // Visitantes cuya PRIMERA asistencia registrada ocurrió en el servicio
-// activo de hoy — para la presentación de bienvenida del Equipo de
-// Bienvenida durante el culto. Si ya tenían asistencias previas (no es su
-// primera vez), no aparecen aquí aunque hayan asistido hoy.
-export function getNewVisitorsForActiveService() {
-    const activeService = getActiveService()
-    if (!activeService) return []
-    return getAttendancesByService(activeService.id)
+// dado — para la presentación de bienvenida y el panel de consulta rápida
+// del Equipo de Bienvenida durante el culto. Si ya tenían asistencias
+// previas (no es su primera vez), no aparecen aquí aunque hayan asistido.
+export function getNewVisitorsForService(serviceId) {
+    if (!serviceId) return []
+    return getAttendancesByService(serviceId)
         .map(att => {
             const member = getMemberById(att.member_id)
             if (!member || member.member_type !== 'Visitante') return null
             const allAttendances = getAttendancesByMember(member.id)
-            const isFirstEver = allAttendances.length === 1 && allAttendances[0].service_id === activeService.id
+            const isFirstEver = allAttendances.length === 1 && allAttendances[0].service_id === serviceId
             return isFirstEver ? member : null
         })
         .filter(Boolean)
+}
+
+export function getNewVisitorsForActiveService() {
+    const activeService = getActiveService()
+    return activeService ? getNewVisitorsForService(activeService.id) : []
 }
 
 export function findAttendanceByMemberAndService(memberId, serviceId) {
@@ -1318,7 +1322,7 @@ export function getMemberEscuelaProgress(memberId) {
 
 // ============== ORACIONES Y GRATITUD ==============
 
-const PRAYER_REQUESTS = [
+let PRAYER_REQUESTS = [
     { id: 'prayer-1', service_id: getActiveService().id, member_id: '1', author_name: 'María García López', type: 'oracion', content: 'Por la salud de mi madre, que está pasando por un tratamiento médico.', status: 'pendiente', created_at: new Date(Date.now() - 86400000).toISOString(), answered_at: null },
     { id: 'prayer-2', service_id: getActiveService().id, member_id: '3', author_name: 'Ana Sofía Torrez', type: 'gratitud', content: 'Gracias a Dios por un nuevo trabajo después de meses buscando.', status: 'pendiente', created_at: new Date(Date.now() - 3600000).toISOString(), answered_at: null },
     { id: 'prayer-3', service_id: getActiveService().id, member_id: '9', author_name: 'Valentina Quispe', type: 'oracion', content: 'Por sabiduría en una decisión importante que debo tomar esta semana.', status: 'contestada', created_at: new Date(Date.now() - 7 * 86400000).toISOString(), answered_at: new Date(Date.now() - 86400000).toISOString() },
@@ -1335,8 +1339,9 @@ export function getPrayerRequestsByService(serviceId) {
 }
 
 export function createPrayerRequest(data) {
+    const id = `prayer-${Date.now()}-${Math.floor(Math.random() * 1000)}`
     const newRequest = {
-        id: `prayer-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        id,
         service_id: data.service_id || null,
         member_id: data.member_id || null,
         author_name: data.author_name,
@@ -1348,6 +1353,8 @@ export function createPrayerRequest(data) {
         answered_at: null,
     }
     PRAYER_REQUESTS.push(newRequest)
+    const { id: _id, ...rest } = newRequest
+    setDoc(doc(db, 'prayerRequests', id), rest).catch(err => console.error('No se pudo sincronizar la petición', err))
     return newRequest
 }
 
@@ -1360,6 +1367,8 @@ export function markPrayerAnswered(id, gratitudeContent) {
     if (!request) return null
     request.status = 'contestada'
     request.answered_at = new Date().toISOString()
+    updateDoc(doc(db, 'prayerRequests', id), { status: request.status, answered_at: request.answered_at })
+        .catch(err => console.error('No se pudo sincronizar la petición contestada', err))
 
     let gratitude = null
     if (gratitudeContent && gratitudeContent.trim()) {
@@ -1725,6 +1734,7 @@ let membersFirstLoad = true
 let usersFirstLoad = true
 let profilesFirstLoad = true
 let profileNotesFirstLoad = true
+let prayerRequestsFirstLoad = true
 let noticesFirstLoad = true
 let servicesFirstLoad = true
 let attendancesFirstLoad = true
@@ -1822,6 +1832,27 @@ export function startCoreDataSync() {
     }, (err) => {
         console.error('Error sincronizando notas de perfil', err)
         profileNotesFirstLoad = false
+    })
+
+    // No bloquea checkCoreDataReady: las peticiones de oración/gratitud no
+    // son necesarias para que el resto de la app arranque.
+    onSnapshot(collection(db, 'prayerRequests'), async (snap) => {
+        if (snap.empty && prayerRequestsFirstLoad && PRAYER_REQUESTS.length > 0) {
+            try {
+                const batch = writeBatch(db)
+                PRAYER_REQUESTS.forEach(p => {
+                    const { id, ...rest } = p
+                    batch.set(doc(db, 'prayerRequests', id), rest)
+                })
+                await batch.commit()
+            } catch (e) { console.error('No se pudieron sembrar las peticiones iniciales', e) }
+            return
+        }
+        PRAYER_REQUESTS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        prayerRequestsFirstLoad = false
+    }, (err) => {
+        console.error('Error sincronizando peticiones de oración', err)
+        prayerRequestsFirstLoad = false
     })
 
     onSnapshot(collection(db, 'groupNotices'), async (snap) => {

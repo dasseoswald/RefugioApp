@@ -1,8 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Modal from '../ui/Modal.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { getMembers, createMember, getAttendancesByService, registerAttendance, cancelAttendance, findAttendanceByMemberAndService, addProfileNote } from '../../data/mockData.js'
-import { Search, Users, CheckCircle2, Circle, User, UserPlus, Sparkles } from 'lucide-react'
+import {
+    getMembers, createMember, getAttendancesByService, registerAttendance, cancelAttendance, findAttendanceByMemberAndService, addProfileNote,
+    getNewVisitorsForService, getPrayerRequestsByService,
+} from '../../data/mockData.js'
+import { Search, Users, CheckCircle2, Circle, User, UserPlus, Sparkles, HandHeart, Heart, RefreshCw } from 'lucide-react'
 
 export default function ServiceAttendanceModal({ isOpen, onClose, service }) {
     const { user } = useAuth()
@@ -10,8 +13,17 @@ export default function ServiceAttendanceModal({ isOpen, onClose, service }) {
     const [searchTerm, setSearchTerm] = useState('')
     const [members, setMembers] = useState(() => getMembers().filter(m => m.is_active).sort((a, b) => a.full_name.localeCompare(b.full_name)))
     const [attendances, setAttendances] = useState(() => getAttendancesByService(service.id))
-    const [newVisitorIds, setNewVisitorIds] = useState([])
+    const [newVisitors, setNewVisitors] = useState(() => getNewVisitorsForService(service.id))
     const [newVisitorForm, setNewVisitorForm] = useState({ full_name: '', phone: '', gender: 'M', notes: '' })
+    const [prayerRequests, setPrayerRequests] = useState(() => getPrayerRequestsByService(service.id))
+
+    // Otros controladores pueden estar registrando peticiones/visitantes al
+    // mismo tiempo desde otro dispositivo — al abrir estas pestañas se trae
+    // lo último sincronizado, y además hay un botón de actualizar manual.
+    useEffect(() => {
+        if (activeTab === 'nuevos') setNewVisitors(getNewVisitorsForService(service.id))
+        if (activeTab === 'oracion') setPrayerRequests(getPrayerRequestsByService(service.id))
+    }, [activeTab, service.id])
 
     const filteredMembers = members.filter(m =>
         m.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -31,8 +43,6 @@ export default function ServiceAttendanceModal({ isOpen, onClose, service }) {
         setAttendances(getAttendancesByService(service.id))
     }
 
-    const newlyAddedMembers = newVisitorIds.map(id => members.find(m => m.id === id)).filter(Boolean)
-
     const handleAddVisitor = () => {
         if (!newVisitorForm.full_name.trim()) return
         const newMember = createMember({
@@ -49,7 +59,7 @@ export default function ServiceAttendanceModal({ isOpen, onClose, service }) {
 
         setMembers(getMembers().filter(m => m.is_active).sort((a, b) => a.full_name.localeCompare(b.full_name)))
         setAttendances(getAttendancesByService(service.id))
-        setNewVisitorIds(prev => [newMember.id, ...prev])
+        setNewVisitors(getNewVisitorsForService(service.id))
         setNewVisitorForm({ full_name: '', phone: '', gender: 'M', notes: '' })
     }
 
@@ -72,16 +82,21 @@ export default function ServiceAttendanceModal({ isOpen, onClose, service }) {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex items-center gap-2 border-b border-gray-100">
+                <div className="flex items-center gap-2 border-b border-gray-100 overflow-x-auto">
                     <button onClick={() => setActiveTab('miembros')}
-                        className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 cursor-pointer ${activeTab === 'miembros' ? 'border-[#2696D2] text-[#111111]' : 'border-transparent text-[#6E6E6E] hover:text-[#111111]'
+                        className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 cursor-pointer flex-shrink-0 whitespace-nowrap ${activeTab === 'miembros' ? 'border-[#2696D2] text-[#111111]' : 'border-transparent text-[#6E6E6E] hover:text-[#111111]'
                             }`}>
                         <Users className="w-4 h-4" /> Miembros
                     </button>
                     <button onClick={() => setActiveTab('nuevos')}
-                        className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 cursor-pointer ${activeTab === 'nuevos' ? 'border-[#2696D2] text-[#111111]' : 'border-transparent text-[#6E6E6E] hover:text-[#111111]'
+                        className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 cursor-pointer flex-shrink-0 whitespace-nowrap ${activeTab === 'nuevos' ? 'border-[#2696D2] text-[#111111]' : 'border-transparent text-[#6E6E6E] hover:text-[#111111]'
                             }`}>
-                        <Sparkles className="w-4 h-4" /> Nuevos {newlyAddedMembers.length > 0 && `(${newlyAddedMembers.length})`}
+                        <Sparkles className="w-4 h-4" /> Nuevos {newVisitors.length > 0 && `(${newVisitors.length})`}
+                    </button>
+                    <button onClick={() => setActiveTab('oracion')}
+                        className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 cursor-pointer flex-shrink-0 whitespace-nowrap ${activeTab === 'oracion' ? 'border-[#2696D2] text-[#111111]' : 'border-transparent text-[#6E6E6E] hover:text-[#111111]'
+                            }`}>
+                        <HandHeart className="w-4 h-4" /> Oración y Gratitud {prayerRequests.length > 0 && `(${prayerRequests.length})`}
                     </button>
                 </div>
 
@@ -160,7 +175,7 @@ export default function ServiceAttendanceModal({ isOpen, onClose, service }) {
                     </div>
                 </div>
                 </>
-                ) : (
+                ) : activeTab === 'nuevos' ? (
                 <>
                 {/* Quick visitor form */}
                 <div className="bg-gray-50/50 border-2 border-dashed border-gray-200 rounded-xl p-4 space-y-3">
@@ -207,17 +222,23 @@ export default function ServiceAttendanceModal({ isOpen, onClose, service }) {
                     </button>
                 </div>
 
-                {/* Recently added visitors */}
+                {/* Visitantes nuevos de este servicio (registrados por cualquier controlador) */}
                 <div className="max-h-[280px] overflow-y-auto pr-2 custom-scrollbar">
-                    <p className="text-xs font-bold text-[#6E6E6E] uppercase tracking-wider mb-2">Nuevos Registrados en Este Servicio</p>
-                    {newlyAddedMembers.length === 0 ? (
+                    <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-bold text-[#6E6E6E] uppercase tracking-wider">Nuevos Registrados en Este Servicio</p>
+                        <button onClick={() => setNewVisitors(getNewVisitorsForService(service.id))}
+                            className="flex items-center gap-1 text-xs text-[#2696D2] hover:underline cursor-pointer flex-shrink-0" aria-label="Actualizar">
+                            <RefreshCw className="w-3.5 h-3.5" /> Actualizar
+                        </button>
+                    </div>
+                    {newVisitors.length === 0 ? (
                         <div className="py-10 text-center text-[#6E6E6E]">
                             <Sparkles className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                            <p className="text-sm font-medium">Aún no has registrado visitantes nuevos hoy</p>
+                            <p className="text-sm font-medium">Aún no hay visitantes nuevos registrados en este servicio</p>
                         </div>
                     ) : (
                         <div className="divide-y divide-gray-50">
-                            {newlyAddedMembers.map(member => (
+                            {newVisitors.map(member => (
                                 <div key={member.id} className="flex items-center justify-between py-3 px-2">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm bg-[#13CD68]">
@@ -234,6 +255,53 @@ export default function ServiceAttendanceModal({ isOpen, onClose, service }) {
                                 </div>
                             ))}
                         </div>
+                    )}
+                </div>
+                </>
+                ) : (
+                <>
+                {/* Peticiones de oración y gratitud de este servicio */}
+                <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-[#6E6E6E] uppercase tracking-wider">Registradas en este servicio</p>
+                    <button onClick={() => setPrayerRequests(getPrayerRequestsByService(service.id))}
+                        className="flex items-center gap-1 text-xs text-[#2696D2] hover:underline cursor-pointer flex-shrink-0" aria-label="Actualizar">
+                        <RefreshCw className="w-3.5 h-3.5" /> Actualizar
+                    </button>
+                </div>
+                <div className="max-h-[440px] overflow-y-auto pr-2 custom-scrollbar space-y-2">
+                    {prayerRequests.length === 0 ? (
+                        <div className="py-10 text-center text-[#6E6E6E]">
+                            <HandHeart className="w-10 h-10 mx-auto mb-2 opacity-20" />
+                            <p className="text-sm font-medium">Aún no hay peticiones ni agradecimientos en este servicio</p>
+                        </div>
+                    ) : (
+                        prayerRequests.map(request => (
+                            <div key={request.id} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/50 border border-gray-100">
+                                {request.type === 'oracion' ? (
+                                    <HandHeart className="w-4 h-4 text-[#2696D2] flex-shrink-0 mt-0.5" />
+                                ) : (
+                                    <Heart className="w-4 h-4 text-[#13CD68] flex-shrink-0 mt-0.5" />
+                                )}
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-xs font-bold text-[#111111]">{request.author_name || 'Anónimo'}</span>
+                                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                                            style={{
+                                                background: request.type === 'oracion' ? '#E8F4FC' : '#E1F9EC',
+                                                color: request.type === 'oracion' ? '#2696D2' : '#13CD68',
+                                            }}>
+                                            {request.type === 'oracion' ? 'Oración' : 'Gratitud'}
+                                        </span>
+                                        {request.type === 'oracion' && request.status === 'contestada' && (
+                                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-gray-100 text-[#6E6E6E]">
+                                                Contestada
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-sm text-[#111111] mt-1">{request.content}</p>
+                                </div>
+                            </div>
+                        ))
                     )}
                 </div>
                 </>
