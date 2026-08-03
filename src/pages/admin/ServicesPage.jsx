@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { getServices, createService, updateService, toggleServiceActive, createPrayerRequest } from '../../data/mockData.js'
+import { getServices, createService, updateService, toggleServiceActive, deleteService, createPrayerRequest } from '../../data/mockData.js'
 import Modal from '../../components/ui/Modal.jsx'
 import ServiceAttendanceModal from '../../components/admin/ServiceAttendanceModal.jsx'
-import { CalendarDays, Plus, Edit2, Power, PowerOff, Users, ClipboardCheck, History, CalendarCheck, HandHeart, Heart, Send } from 'lucide-react'
+import { CalendarDays, Plus, Edit2, Power, PowerOff, Trash2, Users, ClipboardCheck, History, CalendarCheck, HandHeart, Heart, Send } from 'lucide-react'
 import { getAttendancesByService } from '../../data/mockData.js'
 
 // weekday: 0=domingo ... 4=jueves. Devuelve la fecha (YYYY-MM-DD) de ese día
@@ -35,6 +35,7 @@ export default function ServicesPage() {
     const [form, setForm] = useState({ name: '', service_date: '', service_type: 'sunday', pastor_name: '', starts_at: '07:00', ends_at: '13:00' })
     const [prayerService, setPrayerService] = useState(null)
     const [prayerForm, setPrayerForm] = useState({ author_name: '', type: 'oracion', content: '' })
+    const [deletingService, setDeletingService] = useState(null)
 
     const currentWeekDate = getCurrentWeekDate(SERVICE_TYPES[activeType].weekday)
 
@@ -72,6 +73,13 @@ export default function ServicesPage() {
 
     const handleToggle = (id) => {
         toggleServiceActive(id)
+        refreshServices()
+    }
+
+    const handleConfirmDelete = () => {
+        if (!deletingService) return
+        deleteService(deletingService.id)
+        setDeletingService(null)
         refreshServices()
     }
 
@@ -190,6 +198,10 @@ export default function ServicesPage() {
                                             }`} title={service.is_active ? 'Cerrar Servicio' : 'Activar Servicio'}>
                                         {service.is_active ? <PowerOff className="w-4 h-4" /> : <Power className="w-4 h-4" />}
                                     </button>
+                                    <button onClick={() => setDeletingService(service)}
+                                        className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-[#6E6E6E] hover:bg-[#FADBD8] hover:text-[#E74C3C] transition-colors cursor-pointer" title="Eliminar Servicio">
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
                                 </div>
                                 {service.is_active && (
                                     <div className="flex items-center gap-2 mt-2">
@@ -305,6 +317,27 @@ export default function ServicesPage() {
                         style={{ background: prayerForm.type === 'oracion' ? 'linear-gradient(135deg, #2696D2, #1D74A8)' : 'linear-gradient(135deg, #13CD68, #0FA855)' }}>
                         <Send className="w-4 h-4" /> Guardar
                     </button>
+                </div>
+            </Modal>
+
+            {/* Confirmar eliminación */}
+            <Modal isOpen={!!deletingService} onClose={() => setDeletingService(null)} title="Eliminar Servicio">
+                <div className="space-y-4">
+                    <p className="text-sm text-[#111111]">
+                        ¿Eliminar <strong>{deletingService?.name}</strong> del {deletingService && formatDate(deletingService.service_date)}?
+                        Esta acción no se puede deshacer y también borrará las asistencias registradas en ese servicio.
+                    </p>
+                    <div className="flex justify-end gap-3">
+                        <button onClick={() => setDeletingService(null)}
+                            className="px-5 py-2.5 rounded-xl border-2 border-gray-200 text-[#6E6E6E] font-medium text-sm hover:bg-gray-50 transition-colors cursor-pointer">
+                            Cancelar
+                        </button>
+                        <button onClick={handleConfirmDelete}
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-medium text-sm cursor-pointer"
+                            style={{ background: '#E74C3C' }}>
+                            <Trash2 className="w-4 h-4" /> Eliminar
+                        </button>
+                    </div>
                 </div>
             </Modal>
 

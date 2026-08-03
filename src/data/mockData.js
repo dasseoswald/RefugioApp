@@ -347,9 +347,15 @@ export function toggleServiceActive(id) {
     const target = SERVICES.find(s => s.id === id)
     if (!target) return null
     const nextActive = !target.is_active
+    const targetType = target.service_type || 'sunday'
     const batch = writeBatch(db)
     SERVICES = SERVICES.map(s => {
-        if (s.service_type !== target.service_type) return s
+        // Un service_type ausente se trata como 'sunday' (igual que en
+        // getActiveService) — si no, dos servicios del mismo tipo donde uno
+        // no tiene el campo guardado no se reconocen como del mismo tipo, y
+        // ambos pueden quedar activos a la vez sin que este toggle los
+        // desactive correctamente entre sí.
+        if ((s.service_type || 'sunday') !== targetType) return s
         const isActive = (s.id === id) ? nextActive : false
         if (isActive === s.is_active) return s
         batch.update(serviceDocRef(s.id), { is_active: isActive })
@@ -357,6 +363,27 @@ export function toggleServiceActive(id) {
     })
     batch.commit().catch(err => console.error('No se pudo sincronizar la activación del servicio', err))
     return SERVICES.find(s => s.id === id)
+}
+
+// Borra un servicio y sus asistencias asociadas (sin ellas, quedarían
+// asistencias "huérfanas" apuntando a un service_id que ya no existe).
+// No borra peticiones de oración/gratitud ni datos de Alabanza ligados a
+// ese servicio — quedan con su service_id, mostrados como corresponda en
+// el resto de la app (ej. filtro "Todas las canciones" en Repertorio).
+export function deleteService(id) {
+    const target = SERVICES.find(s => s.id === id)
+    if (!target) return false
+
+    SERVICES = SERVICES.filter(s => s.id !== id)
+    deleteDoc(serviceDocRef(id)).catch(err => console.error('No se pudo borrar el servicio', err))
+
+    const attendancesToRemove = ATTENDANCES.filter(a => a.service_id === id)
+    ATTENDANCES = ATTENDANCES.filter(a => a.service_id !== id)
+    attendancesToRemove.forEach(a => {
+        deleteDoc(attendanceDocRef(a.id)).catch(err => console.error('No se pudo borrar una asistencia', err))
+    })
+
+    return true
 }
 
 export function getAttendances() { return [...ATTENDANCES] }
