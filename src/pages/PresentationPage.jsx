@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getActiveService, getPrayerRequestsByService, getNewVisitorsForActiveService } from '../data/mockData.js'
+import { getActiveService, getServices, getPrayerRequestsByService, getNewVisitorsForService } from '../data/mockData.js'
 import { X, ArrowLeft, ArrowRight, HandHeart, Heart, PartyPopper, Maximize2, Minimize2, RefreshCw } from 'lucide-react'
 import logo from '../assets/logo.png'
 
@@ -13,30 +13,42 @@ const CATEGORY_META = {
 export default function PresentationPage() {
     const navigate = useNavigate()
     const containerRef = useRef(null)
-    const [activeService, setActiveService] = useState(undefined) // undefined = cargando, null = sin servicio
+    const [services, setServices] = useState(undefined) // undefined = cargando
+    const [selectedServiceId, setSelectedServiceId] = useState(null)
     const [visitors, setVisitors] = useState([])
     const [prayerRequests, setPrayerRequests] = useState([])
     const [category, setCategory] = useState(null) // null = mostrando las 3 miniaturas
     const [index, setIndex] = useState(0)
     const [isFullscreen, setIsFullscreen] = useState(false)
 
-    const refreshAll = useCallback(() => {
-        const service = getActiveService()
-        setActiveService(service || null)
-        if (!service) return
-        setVisitors(getNewVisitorsForActiveService())
-        setPrayerRequests(getPrayerRequestsByService(service.id))
+    // La detección automática (jueves/domingo según el día) puede fallar si un
+    // servicio no tiene guardado su tipo, o si hay más de uno activo a la vez
+    // — así que el servicio siempre queda elegible a mano, con el detectado
+    // automáticamente (o si no, el más reciente) solo como sugerencia inicial.
+    useEffect(() => {
+        const allServices = [...getServices()].sort((a, b) => new Date(b.service_date) - new Date(a.service_date))
+        setServices(allServices)
+        const suggested = getActiveService() || allServices[0]
+        setSelectedServiceId(suggested?.id || null)
     }, [])
+
+    const refreshAll = useCallback(() => {
+        setServices([...getServices()].sort((a, b) => new Date(b.service_date) - new Date(a.service_date)))
+        if (!selectedServiceId) return
+        setVisitors(getNewVisitorsForService(selectedServiceId))
+        setPrayerRequests(getPrayerRequestsByService(selectedServiceId))
+    }, [selectedServiceId])
 
     useEffect(() => {
         // Vincula la presentación en vivo con lo que se va registrando en el
-        // servicio activo: si alguien envía una petición o se registra un
+        // servicio elegido: si alguien envía una petición o se registra un
         // visitante nuevo mientras la presentación está proyectada, aparece
         // sin necesidad de recargar (mismo polling básico que el Chat).
+        if (!selectedServiceId) return
         refreshAll()
         const intervalId = setInterval(refreshAll, 3000)
         return () => clearInterval(intervalId)
-    }, [refreshAll])
+    }, [selectedServiceId, refreshAll])
 
     useEffect(() => {
         const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement)
@@ -104,12 +116,12 @@ export default function PresentationPage() {
         return () => window.removeEventListener('keydown', handleKeyDown)
     }, [category, goNext, goPrev, backToCategories])
 
-    if (activeService === undefined) return null
+    if (services === undefined) return null
 
-    if (!activeService) {
+    if (services.length === 0) {
         return (
             <EmptyState onExit={() => navigate(-1)}>
-                No hay un servicio activo en este momento. Activa un servicio desde Servicios para poder presentar.
+                Todavía no hay servicios creados. Crea uno desde Servicios para poder presentar.
             </EmptyState>
         )
     }
@@ -119,7 +131,8 @@ export default function PresentationPage() {
             style={{ background: 'linear-gradient(135deg, #010101 0%, #111111 55%, #2696D2 100%)' }}>
             {!category ? (
                 <CategoryPicker categories={categories} onSelect={selectCategory} onExit={() => navigate(-1)}
-                    activeService={activeService} onRefresh={refreshAll} />
+                    services={services} selectedServiceId={selectedServiceId} onSelectService={setSelectedServiceId}
+                    onRefresh={refreshAll} />
             ) : (
                 <Slideshow
                     category={category}
@@ -136,13 +149,13 @@ export default function PresentationPage() {
     )
 }
 
-function CategoryPicker({ categories, onSelect, onExit, activeService, onRefresh }) {
-    const formatServiceLabel = (service) => {
-        if (!service) return ''
+function CategoryPicker({ categories, onSelect, onExit, services, selectedServiceId, onSelectService, onRefresh }) {
+    const formatServiceOption = (service) => {
         const [year, month, day] = service.service_date.split('-').map(Number)
         const date = new Date(year, month - 1, day)
         const dateLabel = date.toLocaleDateString('es', { day: 'numeric', month: 'long' })
-        return `${service.name} · ${dateLabel}`
+        const activeTag = service.is_active ? ' 🟢' : ''
+        return `${service.name} · ${dateLabel}${activeTag}`
     }
 
     return (
@@ -161,8 +174,17 @@ function CategoryPicker({ categories, onSelect, onExit, activeService, onRefresh
                 <img src={logo} alt="Refugio App" className="w-6 h-6 object-contain opacity-70" />
                 <h1 className="text-white text-2xl font-bold">Presentación en vivo</h1>
             </div>
-            <p className="text-white/50 mb-1 text-sm">Elige qué mostrar en pantalla</p>
-            <p className="text-white/30 mb-10 text-xs">Servicio detectado: {formatServiceLabel(activeService)}</p>
+            <p className="text-white/50 mb-4 text-sm">Elige qué mostrar en pantalla</p>
+
+            <select
+                value={selectedServiceId || ''}
+                onChange={(e) => onSelectService(e.target.value)}
+                className="mb-10 px-4 py-2.5 rounded-xl border-2 border-white/10 bg-white/5 text-white text-sm cursor-pointer focus:outline-none focus:border-white/30 max-w-full"
+            >
+                {services.map(s => (
+                    <option key={s.id} value={s.id} className="text-[#111111]">{formatServiceOption(s)}</option>
+                ))}
+            </select>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full max-w-4xl">
                 {categories.map(({ id, count }) => {
@@ -206,7 +228,7 @@ function Slideshow({ category, slides, index, onNext, onPrev, onBack, isFullscre
             {slides.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center px-8 text-center">
                     <p className="text-white/60 text-lg max-w-md">
-                        Todavía no hay {meta.label.toLowerCase()} registradas para el servicio de hoy.
+                        Todavía no hay {meta.label.toLowerCase()} registradas para este servicio.
                     </p>
                 </div>
             ) : (
