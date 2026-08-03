@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getActiveService, getPrayerRequestsByService, getNewVisitorsForActiveService } from '../data/mockData.js'
-import { X, ArrowLeft, ArrowRight, HandHeart, Heart, PartyPopper, Maximize2, Minimize2 } from 'lucide-react'
+import { X, ArrowLeft, ArrowRight, HandHeart, Heart, PartyPopper, Maximize2, Minimize2, RefreshCw } from 'lucide-react'
 import logo from '../assets/logo.png'
 
 const CATEGORY_META = {
@@ -20,23 +20,23 @@ export default function PresentationPage() {
     const [index, setIndex] = useState(0)
     const [isFullscreen, setIsFullscreen] = useState(false)
 
-    useEffect(() => {
+    const refreshAll = useCallback(() => {
         const service = getActiveService()
         setActiveService(service || null)
         if (!service) return
+        setVisitors(getNewVisitorsForActiveService())
+        setPrayerRequests(getPrayerRequestsByService(service.id))
+    }, [])
 
+    useEffect(() => {
         // Vincula la presentación en vivo con lo que se va registrando en el
         // servicio activo: si alguien envía una petición o se registra un
         // visitante nuevo mientras la presentación está proyectada, aparece
         // sin necesidad de recargar (mismo polling básico que el Chat).
-        const refreshSlideData = () => {
-            setVisitors(getNewVisitorsForActiveService())
-            setPrayerRequests(getPrayerRequestsByService(service.id))
-        }
-        refreshSlideData()
-        const intervalId = setInterval(refreshSlideData, 3000)
+        refreshAll()
+        const intervalId = setInterval(refreshAll, 3000)
         return () => clearInterval(intervalId)
-    }, [])
+    }, [refreshAll])
 
     useEffect(() => {
         const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement)
@@ -118,7 +118,8 @@ export default function PresentationPage() {
         <div ref={containerRef} className="min-h-screen select-none"
             style={{ background: 'linear-gradient(135deg, #010101 0%, #111111 55%, #2696D2 100%)' }}>
             {!category ? (
-                <CategoryPicker categories={categories} onSelect={selectCategory} onExit={() => navigate(-1)} />
+                <CategoryPicker categories={categories} onSelect={selectCategory} onExit={() => navigate(-1)}
+                    activeService={activeService} onRefresh={refreshAll} />
             ) : (
                 <Slideshow
                     category={category}
@@ -135,7 +136,15 @@ export default function PresentationPage() {
     )
 }
 
-function CategoryPicker({ categories, onSelect, onExit }) {
+function CategoryPicker({ categories, onSelect, onExit, activeService, onRefresh }) {
+    const formatServiceLabel = (service) => {
+        if (!service) return ''
+        const [year, month, day] = service.service_date.split('-').map(Number)
+        const date = new Date(year, month - 1, day)
+        const dateLabel = date.toLocaleDateString('es', { day: 'numeric', month: 'long' })
+        return `${service.name} · ${dateLabel}`
+    }
+
     return (
         <div className="min-h-screen flex flex-col items-center justify-center px-8 py-12 relative">
             <button onClick={onExit}
@@ -143,11 +152,17 @@ function CategoryPicker({ categories, onSelect, onExit }) {
                 className="absolute left-6 flex items-center gap-2 text-white/60 hover:text-white transition-colors cursor-pointer text-sm font-medium">
                 <X className="w-5 h-5" /> Salir
             </button>
+            <button onClick={onRefresh}
+                style={{ top: 'max(1.5rem, calc(env(safe-area-inset-top) + 0.75rem))' }}
+                className="absolute right-6 flex items-center gap-2 text-white/60 hover:text-white transition-colors cursor-pointer text-sm font-medium">
+                <RefreshCw className="w-4 h-4" /> Actualizar
+            </button>
             <div className="flex items-center gap-2 mb-2">
                 <img src={logo} alt="Refugio App" className="w-6 h-6 object-contain opacity-70" />
                 <h1 className="text-white text-2xl font-bold">Presentación en vivo</h1>
             </div>
-            <p className="text-white/50 mb-10 text-sm">Elige qué mostrar en pantalla</p>
+            <p className="text-white/50 mb-1 text-sm">Elige qué mostrar en pantalla</p>
+            <p className="text-white/30 mb-10 text-xs">Servicio detectado: {formatServiceLabel(activeService)}</p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full max-w-4xl">
                 {categories.map(({ id, count }) => {
