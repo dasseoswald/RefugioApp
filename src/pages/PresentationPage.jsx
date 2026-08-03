@@ -24,8 +24,18 @@ export default function PresentationPage() {
         const service = getActiveService()
         setActiveService(service || null)
         if (!service) return
-        setVisitors(getNewVisitorsForActiveService())
-        setPrayerRequests(getPrayerRequestsByService(service.id))
+
+        // Vincula la presentación en vivo con lo que se va registrando en el
+        // servicio activo: si alguien envía una petición o se registra un
+        // visitante nuevo mientras la presentación está proyectada, aparece
+        // sin necesidad de recargar (mismo polling básico que el Chat).
+        const refreshSlideData = () => {
+            setVisitors(getNewVisitorsForActiveService())
+            setPrayerRequests(getPrayerRequestsByService(service.id))
+        }
+        refreshSlideData()
+        const intervalId = setInterval(refreshSlideData, 3000)
+        return () => clearInterval(intervalId)
     }, [])
 
     useEffect(() => {
@@ -34,17 +44,22 @@ export default function PresentationPage() {
         return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
     }, [])
 
-    const oracionItems = prayerRequests.filter(r => r.type === 'oracion')
-    const gratitudItems = prayerRequests.filter(r => r.type === 'gratitud')
+    // Orden cronológico (más antiguo primero): así, si llega una petición
+    // nueva mientras se está presentando, se agrega al final de la lista en
+    // vez de correr la diapositiva que la persona está mostrando en ese momento.
+    const byCreatedAtAsc = (a, b) => new Date(a.created_at) - new Date(b.created_at)
+    const sortedVisitors = [...visitors].sort(byCreatedAtAsc)
+    const oracionItems = prayerRequests.filter(r => r.type === 'oracion').sort(byCreatedAtAsc)
+    const gratitudItems = prayerRequests.filter(r => r.type === 'gratitud').sort(byCreatedAtAsc)
 
     const categories = [
-        { id: 'bienvenida', count: visitors.length },
+        { id: 'bienvenida', count: sortedVisitors.length },
         { id: 'oracion', count: oracionItems.length },
         { id: 'gratitud', count: gratitudItems.length },
     ]
 
     const slides = category === 'bienvenida'
-        ? visitors.map(member => ({ kind: 'welcome', member }))
+        ? sortedVisitors.map(member => ({ kind: 'welcome', member }))
         : category === 'oracion'
             ? oracionItems.map(request => ({ kind: 'prayer', request }))
             : category === 'gratitud'
