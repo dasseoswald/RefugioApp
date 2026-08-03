@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
-import { getServices, createService, updateService, toggleServiceActive, deleteService, createPrayerRequest } from '../../data/mockData.js'
+import { useAuth } from '../../context/AuthContext.jsx'
+import { getServices, createService, updateService, toggleServiceActive, deleteService, createPrayerRequest, addProfileNote } from '../../data/mockData.js'
 import Modal from '../../components/ui/Modal.jsx'
 import ServiceAttendanceModal from '../../components/admin/ServiceAttendanceModal.jsx'
+import MemberAutocomplete from '../../components/shared/MemberAutocomplete.jsx'
 import { CalendarDays, Plus, Edit2, Power, PowerOff, Trash2, Users, ClipboardCheck, History, CalendarCheck, HandHeart, Heart, Send } from 'lucide-react'
 import { getAttendancesByService } from '../../data/mockData.js'
 
@@ -25,6 +27,7 @@ const SERVICE_TYPES = {
 }
 
 export default function ServicesPage() {
+    const { user } = useAuth()
     const [services, setServices] = useState([])
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false)
@@ -35,6 +38,7 @@ export default function ServicesPage() {
     const [form, setForm] = useState({ name: '', service_date: '', service_type: 'sunday', pastor_name: '', starts_at: '07:00', ends_at: '13:00' })
     const [prayerService, setPrayerService] = useState(null)
     const [prayerForm, setPrayerForm] = useState({ author_name: '', type: 'oracion', content: '' })
+    const [prayerMemberId, setPrayerMemberId] = useState(null)
     const [deletingService, setDeletingService] = useState(null)
 
     const currentWeekDate = getCurrentWeekDate(SERVICE_TYPES[activeType].weekday)
@@ -99,17 +103,24 @@ export default function ServicesPage() {
     const openPrayerModal = (service, type) => {
         setPrayerService(service)
         setPrayerForm({ author_name: '', type, content: '' })
+        setPrayerMemberId(null)
     }
 
     const handleSubmitPrayer = () => {
         if (!prayerForm.author_name.trim() || !prayerForm.content.trim()) return
         createPrayerRequest({
             service_id: prayerService.id,
-            member_id: null,
+            member_id: prayerMemberId || null,
             author_name: prayerForm.author_name.trim(),
             type: prayerForm.type,
             content: prayerForm.content.trim(),
         })
+        // Deja registro histórico en la ficha del miembro, si la petición
+        // quedó asociada a uno (autocompletar seleccionado).
+        if (prayerMemberId) {
+            const label = prayerForm.type === 'oracion' ? 'Petición de oración' : 'Agradecimiento'
+            addProfileNote(prayerMemberId, user?.name || 'Sistema', `${label}: ${prayerForm.content.trim()}`)
+        }
         setPrayerService(null)
     }
 
@@ -299,8 +310,15 @@ export default function ServicesPage() {
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-[#111111] mb-1.5">Nombre del Hermano/a *</label>
-                        <input type="text" value={prayerForm.author_name} onChange={(e) => setPrayerForm(f => ({ ...f, author_name: e.target.value }))}
-                            placeholder="Nombre completo" className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] text-sm" />
+                        <MemberAutocomplete
+                            value={prayerForm.author_name}
+                            onChange={(name) => setPrayerForm(f => ({ ...f, author_name: name }))}
+                            onSelectMember={(member) => setPrayerMemberId(member?.id || null)}
+                            placeholder="Busca un miembro o escribe un nombre..."
+                        />
+                        {prayerMemberId && (
+                            <p className="text-xs text-[#13CD68] mt-1">✓ Se guardará también como nota en su ficha de miembro</p>
+                        )}
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-[#111111] mb-1.5">
