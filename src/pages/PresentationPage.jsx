@@ -187,6 +187,7 @@ export default function PresentationPage() {
                     isFullscreen={isFullscreen}
                     onToggleFullscreen={toggleFullscreen}
                     onSwitchCategory={switchCategory}
+                    onManageAnnouncements={() => setShowManageAnnouncements(true)}
                 />
             )}
             <ManageAnnouncementsModal
@@ -246,18 +247,26 @@ function CategoryPicker({ categories, onSelect, onExit, services, selectedServic
                 {categories.map(({ id, count }) => {
                     const meta = CATEGORY_META[id]
                     return (
-                        <div key={id} className="relative">
-                            <button onClick={() => onSelect(id)}
-                                className="group w-full rounded-2xl overflow-hidden aspect-[4/3] flex flex-col items-center justify-center gap-3 border-2 border-white/10 hover:border-white/30 hover:-translate-y-1 transition-all duration-200 cursor-pointer p-6"
-                                style={{ background: 'linear-gradient(135deg, #161616, #010101)' }}>
-                                <meta.icon className="w-10 h-10 transition-transform group-hover:scale-110" style={{ color: meta.color }} />
-                                <span className="text-white font-semibold text-lg">{meta.label}</span>
-                                <span className="text-white/40 text-sm">{count} {count === 1 ? 'elemento' : 'elementos'}</span>
-                            </button>
+                        <div key={id} className="flex flex-col gap-2">
+                            <div className="relative">
+                                <button onClick={() => onSelect(id)}
+                                    className="group w-full rounded-2xl overflow-hidden aspect-[4/3] flex flex-col items-center justify-center gap-3 border-2 border-white/10 hover:border-white/30 hover:-translate-y-1 transition-all duration-200 cursor-pointer p-6"
+                                    style={{ background: 'linear-gradient(135deg, #161616, #010101)' }}>
+                                    <meta.icon className="w-10 h-10 transition-transform group-hover:scale-110" style={{ color: meta.color }} />
+                                    <span className="text-white font-semibold text-lg">{meta.label}</span>
+                                    <span className="text-white/40 text-sm">{count} {count === 1 ? 'elemento' : 'elementos'}</span>
+                                </button>
+                                {id === 'anuncios' && (
+                                    <button onClick={onManageAnnouncements} title="Configurar anuncios"
+                                        className="absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer">
+                                        <Settings className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
                             {id === 'anuncios' && (
-                                <button onClick={onManageAnnouncements} title="Gestionar anuncios"
-                                    className="absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer">
-                                    <Settings className="w-4 h-4" />
+                                <button onClick={onManageAnnouncements}
+                                    className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-medium text-white/70 hover:text-white bg-white/5 hover:bg-white/10 transition-colors cursor-pointer">
+                                    <Settings className="w-4 h-4" /> Agregar o quitar anuncios
                                 </button>
                             )}
                         </div>
@@ -268,7 +277,7 @@ function CategoryPicker({ categories, onSelect, onExit, services, selectedServic
     )
 }
 
-function Slideshow({ category, slides, index, onNext, onPrev, onBack, isFullscreen, onToggleFullscreen, onSwitchCategory }) {
+function Slideshow({ category, slides, index, onNext, onPrev, onBack, isFullscreen, onToggleFullscreen, onSwitchCategory, onManageAnnouncements }) {
     const meta = CATEGORY_META[category]
 
     return (
@@ -281,6 +290,12 @@ function Slideshow({ category, slides, index, onNext, onPrev, onBack, isFullscre
                     <ArrowLeft className="w-5 h-5" /> Volver
                 </button>
                 <div className="flex items-center gap-4">
+                    {category === 'anuncios' && (
+                        <button onClick={onManageAnnouncements}
+                            className="flex items-center gap-2 text-white/60 hover:text-white transition-colors cursor-pointer text-sm font-medium">
+                            <Settings className="w-4 h-4" /> Agregar o quitar anuncios
+                        </button>
+                    )}
                     {slides.length > 0 && <span className="text-white/40 text-sm">{index + 1} / {slides.length}</span>}
                     <button onClick={onToggleFullscreen}
                         className="text-white/60 hover:text-white transition-colors cursor-pointer" aria-label="Pantalla completa">
