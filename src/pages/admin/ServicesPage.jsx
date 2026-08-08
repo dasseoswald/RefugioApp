@@ -4,8 +4,11 @@ import { getServices, createService, updateService, toggleServiceActive, deleteS
 import Modal from '../../components/ui/Modal.jsx'
 import ServiceAttendanceModal from '../../components/admin/ServiceAttendanceModal.jsx'
 import MemberAutocomplete from '../../components/shared/MemberAutocomplete.jsx'
-import { CalendarDays, Plus, Edit2, Power, PowerOff, Trash2, Users, ClipboardCheck, History, CalendarCheck, HandHeart, Heart, Send } from 'lucide-react'
+import { CalendarDays, Plus, Edit2, Power, PowerOff, Trash2, Users, ClipboardCheck, History, CalendarCheck, HandHeart, Heart, Send, QrCode, Download } from 'lucide-react'
 import { getAttendancesByService } from '../../data/mockData.js'
+import { QRCodeCanvas } from 'qrcode.react'
+
+const CHECKIN_URL = 'https://unrefugioapp.vercel.app/checkin'
 
 // weekday: 0=domingo ... 4=jueves. Devuelve la fecha (YYYY-MM-DD) de ese día
 // en la semana actual (si ya pasó esta semana, avanza a la próxima).
@@ -40,6 +43,7 @@ export default function ServicesPage() {
     const [prayerForm, setPrayerForm] = useState({ author_name: '', type: 'oracion', content: '' })
     const [prayerMemberId, setPrayerMemberId] = useState(null)
     const [deletingService, setDeletingService] = useState(null)
+    const [showQrModal, setShowQrModal] = useState(false)
 
     const currentWeekDate = getCurrentWeekDate(SERVICE_TYPES[activeType].weekday)
 
@@ -87,6 +91,15 @@ export default function ServicesPage() {
         refreshServices()
     }
 
+    const handleDownloadQr = () => {
+        const canvas = document.getElementById('checkin-qr-canvas')
+        if (!canvas) return
+        const link = document.createElement('a')
+        link.download = 'codigo-qr-asistencia.png'
+        link.href = canvas.toDataURL('image/png')
+        link.click()
+    }
+
     const formatDate = (dateStr) => {
         if (!dateStr) return '—'
         // Create date using local components to avoid timezone offset issues
@@ -132,6 +145,10 @@ export default function ServicesPage() {
                     <p className="text-[#6E6E6E] mt-1">{showAll ? 'Historial completo de servicios' : 'Servicio de esta semana'}</p>
                 </div>
                 <div className="flex items-center gap-2">
+                    <button onClick={() => setShowQrModal(true)}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border-2 border-gray-200 text-[#6E6E6E] hover:bg-gray-50 transition-colors cursor-pointer">
+                        <QrCode className="w-4 h-4" /> Código QR
+                    </button>
                     <button onClick={() => setShowAll(v => !v)}
                         className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border-2 border-gray-200 text-[#6E6E6E] hover:bg-gray-50 transition-colors cursor-pointer">
                         {showAll ? <CalendarCheck className="w-4 h-4" /> : <History className="w-4 h-4" />}
@@ -233,6 +250,24 @@ export default function ServicesPage() {
                     )
                 })}
             </div>
+
+            {/* Código QR de registro de asistencia */}
+            <Modal isOpen={showQrModal} onClose={() => setShowQrModal(false)} title="Código QR de Asistencia">
+                <div className="space-y-4 text-center">
+                    <p className="text-sm text-[#6E6E6E]">
+                        Imprime este código y colócalo en la entrada. Cada hermano lo escanea con la cámara de su celular y su asistencia se registra automáticamente en el servicio activo. Es el mismo código todas las semanas — no hace falta generar uno nuevo.
+                    </p>
+                    <div className="flex justify-center p-6 bg-white rounded-2xl border-2 border-gray-100">
+                        <QRCodeCanvas id="checkin-qr-canvas" value={CHECKIN_URL} size={220} level="M" />
+                    </div>
+                    <p className="text-xs text-[#6E6E6E] break-all">{CHECKIN_URL}</p>
+                    <button onClick={handleDownloadQr}
+                        className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white font-medium text-sm transition-all hover:shadow-lg cursor-pointer"
+                        style={{ background: 'linear-gradient(135deg, #2696D2, #1D74A8)' }}>
+                        <Download className="w-4 h-4" /> Descargar Imagen
+                    </button>
+                </div>
+            </Modal>
 
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editing ? 'Editar Servicio' : 'Nuevo Servicio'}>
                 <div className="space-y-4">

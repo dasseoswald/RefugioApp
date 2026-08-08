@@ -1,14 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import {
     getActiveService, getAttendancesByMember, getAttendancesByService, registerAttendance, getServices, getMemberById,
-    getMemberEscuelaProgress, ESCUELA_GUIDE_URLS
+    getMemberEscuelaProgress, ESCUELA_GUIDE_URLS, CHURCH_LOCATION, CHECKIN_RADIUS_METERS, distanceInMeters
 } from '../../data/mockData.js'
-import { CheckCircle2, Clock, CalendarDays, UserCheck, Church, History, Sparkles, GraduationCap, FileText } from 'lucide-react'
+import { CheckCircle2, Clock, CalendarDays, UserCheck, Church, History, Sparkles, GraduationCap, FileText, MapPin } from 'lucide-react'
 import NovedadesCarousel from '../../components/shared/NovedadesCarousel.jsx'
 import NextEventBanner from '../../components/shared/NextEventBanner.jsx'
 
 const LEVEL_NAMES = { 1: 'Nivel 1', 2: 'Nivel 2', 3: 'Nivel 3' }
+const METHOD_LABELS = { facial: 'Facial', qr: 'Código QR', gps: 'GPS', manual: 'Manual' }
 
 export default function AttendeeDashboard() {
     const { user } = useAuth()
@@ -17,6 +18,8 @@ export default function AttendeeDashboard() {
     const [isRegistered, setIsRegistered] = useState(false)
     const [showConfirmation, setShowConfirmation] = useState(false)
     const [registrationTime, setRegistrationTime] = useState(null)
+    const [registrationMethod, setRegistrationMethod] = useState('manual')
+    const gpsAttempted = useRef(false)
 
     useEffect(() => {
         const service = getActiveService()
@@ -32,19 +35,45 @@ export default function AttendeeDashboard() {
         }
     }, [user.member_id])
 
+    const completeRegistration = (method) => {
+        setIsRegistered(true)
+        setRegistrationTime(new Date())
+        setRegistrationMethod(method)
+        setShowConfirmation(true)
+        setMyAttendances(getAttendancesByMember(user.member_id))
+        setTimeout(() => setShowConfirmation(false), 4000)
+    }
+
     const handleRegister = () => {
         if (!activeService || isRegistered) return
-
         const result = registerAttendance(user.member_id, activeService.id, 'manual')
-        if (result.data) {
-            setIsRegistered(true)
-            setRegistrationTime(new Date())
-            setShowConfirmation(true)
-            setMyAttendances(getAttendancesByMember(user.member_id))
-
-            setTimeout(() => setShowConfirmation(false), 4000)
-        }
+        if (result.data) completeRegistration('manual')
     }
+
+    // Al abrir el panel con un servicio activo, si el celular reporta estar
+    // cerca de la iglesia, se registra la asistencia automáticamente — sin
+    // necesidad de tocar el botón. Se intenta una sola vez por visita; si el
+    // navegador niega el permiso o no hay GPS disponible, no pasa nada y
+    // queda disponible el registro manual de siempre.
+    useEffect(() => {
+        if (!activeService || isRegistered || gpsAttempted.current) return
+        if (!('geolocation' in navigator)) return
+        gpsAttempted.current = true
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const distance = distanceInMeters(
+                    position.coords.latitude, position.coords.longitude,
+                    CHURCH_LOCATION.lat, CHURCH_LOCATION.lng
+                )
+                if (distance <= CHECKIN_RADIUS_METERS) {
+                    const result = registerAttendance(user.member_id, activeService.id, 'gps')
+                    if (result.data) completeRegistration('gps')
+                }
+            },
+            () => { /* permiso denegado o ubicación no disponible: se ignora, queda el botón manual */ },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+        )
+    }, [activeService, isRegistered, user.member_id])
 
     const services = getServices()
 
@@ -91,6 +120,11 @@ export default function AttendeeDashboard() {
                         <CheckCircle2 className="w-10 h-10 text-white" />
                     </div>
                     <h2 className="text-2xl font-bold text-[#111111] mb-2">¡Asistencia Registrada!</h2>
+                    {registrationMethod === 'gps' && (
+                        <p className="text-[#6E6E6E] text-sm mb-2 flex items-center justify-center gap-1.5">
+                            <MapPin className="w-4 h-4 text-[#13CD68]" /> Te detectamos cerca de la iglesia
+                        </p>
+                    )}
                     <p className="text-[#13CD68] font-medium">{member?.full_name}</p>
                     <p className="text-[#6E6E6E] text-sm mt-2">
                         <Clock className="w-4 h-4 inline mr-1" />
@@ -186,8 +220,8 @@ export default function AttendeeDashboard() {
                                     </div>
                                     <div className="text-right">
                                         <p className="text-sm font-medium text-[#2696D2]">{formatTime(att.check_in_time)}</p>
-                                        <span className={`text-xs px-2 py-0.5 rounded-full ${att.method === 'facial' ? 'bg-[#E8F4FC] text-[#2696D2]' : 'bg-[#E1F9EC] text-[#13CD68]'}`}>
-                                            {att.method === 'facial' ? 'Facial' : 'Manual'}
+                                        <span className={`text-xs px-2 py-0.5 rounded-full ${att.method === 'facial' ? 'bg-[#E8F4FC] text-[#2696D2]' : att.method === 'gps' || att.method === 'qr' ? 'bg-[#F3E8FB] text-[#9B59B6]' : 'bg-[#E1F9EC] text-[#13CD68]'}`}>
+                                            {METHOD_LABELS[att.method] || 'Manual'}
                                         </span>
                                     </div>
                                 </div>

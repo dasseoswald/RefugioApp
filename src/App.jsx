@@ -27,6 +27,7 @@ import BibliaPage from './pages/shared/BibliaPage.jsx'
 import ForumPage from './pages/shared/ForumPage.jsx'
 import FinanzasPage from './pages/tesorero/FinanzasPage.jsx'
 import PresentationPage from './pages/PresentationPage.jsx'
+import CheckinPage from './pages/CheckinPage.jsx'
 import OnboardingPrompt from './components/shared/OnboardingPrompt.jsx'
 import SetPasswordPrompt from './components/shared/SetPasswordPrompt.jsx'
 import { OPERATIONAL_GROUPS } from './data/mockData.js'
@@ -87,11 +88,18 @@ export default function App() {
         <Routes>
             {/* Login */}
             <Route path="/login" element={
-                isAuthenticated ? <Navigate to={DEFAULT_ROUTES[user.role] || '/attendee'} replace /> : <LoginPage />
+                isAuthenticated
+                    ? <Navigate to={sessionStorage.getItem('pending_checkin') ? '/checkin' : (DEFAULT_ROUTES[user.role] || '/attendee')} replace />
+                    : <LoginPage />
             } />
             <Route path="/register" element={
-                isAuthenticated ? <Navigate to={DEFAULT_ROUTES[user.role] || '/attendee'} replace /> : <RegisterPage />
+                isAuthenticated
+                    ? <Navigate to={sessionStorage.getItem('pending_checkin') ? '/checkin' : (DEFAULT_ROUTES[user.role] || '/attendee')} replace />
+                    : <RegisterPage />
             } />
+
+            {/* Código QR de la entrada: registra la asistencia al servicio activo */}
+            <Route path="/checkin" element={<CheckinPage />} />
 
             {/* Attendee routes */}
             <Route path="/attendee" element={

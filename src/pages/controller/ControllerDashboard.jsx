@@ -160,9 +160,11 @@ export default function ControllerDashboard() {
                                             <td className="px-6 py-4">
                                                 <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${att.method === 'facial'
                                                         ? 'bg-[#E8A838]/10 text-[#E8A838]'
-                                                        : 'bg-[#E1F9EC] text-[#13CD68]'
+                                                        : att.method === 'gps' || att.method === 'qr'
+                                                            ? 'bg-[#9B59B6]/10 text-[#9B59B6]'
+                                                            : 'bg-[#E1F9EC] text-[#13CD68]'
                                                     }`}>
-                                                    {att.method === 'facial' ? '🤖 Facial' : '✋ Manual'}
+                                                    {att.method === 'facial' ? '🤖 Facial' : att.method === 'gps' ? '📍 GPS' : att.method === 'qr' ? '▦ QR' : '✋ Manual'}
                                                 </span>
                                             </td>
                                         </tr>

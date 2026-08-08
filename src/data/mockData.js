@@ -7,6 +7,22 @@
 import { db } from '../firebase.js'
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch, arrayUnion, query, orderBy, limit } from 'firebase/firestore'
 
+// Ubicación de la iglesia (Un Refugio para la Familia, Coelemu) para el
+// registro automático de asistencia por GPS. El radio incluye margen para
+// la imprecisión típica del GPS de un celular (10-50m).
+export const CHURCH_LOCATION = { lat: -36.4905608, lng: -72.7041862 }
+export const CHECKIN_RADIUS_METERS = 100
+
+// Distancia entre dos coordenadas GPS en metros (fórmula de Haversine).
+export function distanceInMeters(lat1, lng1, lat2, lng2) {
+    const R = 6371000
+    const toRad = (deg) => (deg * Math.PI) / 180
+    const dLat = toRad(lat2 - lat1)
+    const dLng = toRad(lng2 - lng1)
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+    return 2 * R * Math.asin(Math.sqrt(a))
+}
+
 // Cada check acumulado (según cantidad de servicios a los que ha asistido un
 // visitante) corresponde a una acción presencial que el equipo de bienvenida
 // debe realizar: 1=Bienvenida, 2=Folleto, 3=Charla de 5 min, 4=Kit de bienvenida.
