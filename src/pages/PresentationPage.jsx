@@ -20,6 +20,12 @@ const CATEGORY_META = {
     anuncios: { label: 'Anuncios', icon: Megaphone, color: '#9B59B6' },
 }
 
+// Orden en el que se recorren las secciones dentro de la presentación (con
+// las flechas arriba/abajo o los botones de la barra superior), sin salir
+// de pantalla completa. Cambiar este orden es lo único que hay que tocar
+// si más adelante se quiere otro orden.
+const CATEGORY_ORDER = ['bienvenida', 'gratitud', 'oracion', 'anuncios']
+
 export default function PresentationPage() {
     const navigate = useNavigate()
     const containerRef = useRef(null)
@@ -105,6 +111,18 @@ export default function PresentationPage() {
 
     const selectCategory = (id) => { setCategory(id); setIndex(0) }
 
+    // Cambia de sección (Bienvenida/Agradecimientos/Oración/Anuncios) sin
+    // tocar el estado de pantalla completa, así el operador puede recorrer
+    // todo el culto sin salir del proyector.
+    const switchCategory = useCallback((direction) => {
+        setCategory(current => {
+            const pos = CATEGORY_ORDER.indexOf(current)
+            const nextPos = (pos + direction + CATEGORY_ORDER.length) % CATEGORY_ORDER.length
+            return CATEGORY_ORDER[nextPos]
+        })
+        setIndex(0)
+    }, [])
+
     const exitFullscreenIfNeeded = () => {
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
     }
@@ -132,11 +150,13 @@ export default function PresentationPage() {
             if (!category) return
             if (e.key === 'ArrowRight' || e.key === ' ') goNext()
             if (e.key === 'ArrowLeft') goPrev()
+            if (e.key === 'ArrowDown') switchCategory(1)
+            if (e.key === 'ArrowUp') switchCategory(-1)
             if (e.key === 'Escape' && !document.fullscreenElement) backToCategories()
         }
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [category, goNext, goPrev, backToCategories])
+    }, [category, goNext, goPrev, backToCategories, switchCategory])
 
     if (services === undefined) return null
 
@@ -166,6 +186,7 @@ export default function PresentationPage() {
                     onBack={backToCategories}
                     isFullscreen={isFullscreen}
                     onToggleFullscreen={toggleFullscreen}
+                    onSwitchCategory={switchCategory}
                 />
             )}
             <ManageAnnouncementsModal
@@ -187,7 +208,7 @@ function CategoryPicker({ categories, onSelect, onExit, services, selectedServic
     }
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center px-8 py-12 relative">
+        <div className="min-h-screen flex flex-col items-center justify-center px-8 py-12 relative overflow-y-auto">
             <button onClick={onExit}
                 style={{ top: 'max(1.5rem, calc(env(safe-area-inset-top) + 0.75rem))' }}
                 className="absolute left-6 flex items-center gap-2 text-white/60 hover:text-white transition-colors cursor-pointer text-sm font-medium">
@@ -247,13 +268,13 @@ function CategoryPicker({ categories, onSelect, onExit, services, selectedServic
     )
 }
 
-function Slideshow({ category, slides, index, onNext, onPrev, onBack, isFullscreen, onToggleFullscreen }) {
+function Slideshow({ category, slides, index, onNext, onPrev, onBack, isFullscreen, onToggleFullscreen, onSwitchCategory }) {
     const meta = CATEGORY_META[category]
 
     return (
         <div className="min-h-screen flex flex-col">
             {/* Barra superior */}
-            <div className="flex items-center justify-between px-6 pb-6"
+            <div className="flex items-center justify-between px-6 pb-4 gap-4 flex-wrap"
                 style={{ paddingTop: 'max(1.5rem, calc(env(safe-area-inset-top) + 0.75rem))' }}>
                 <button onClick={onBack}
                     className="flex items-center gap-2 text-white/60 hover:text-white transition-colors cursor-pointer text-sm font-medium">
@@ -266,6 +287,23 @@ function Slideshow({ category, slides, index, onNext, onPrev, onBack, isFullscre
                         {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
                     </button>
                 </div>
+            </div>
+
+            {/* Cambiar de sección sin salir de pantalla completa */}
+            <div className="flex items-center justify-center gap-2 px-6 pb-6">
+                {CATEGORY_ORDER.map(id => {
+                    const itemMeta = CATEGORY_META[id]
+                    const isCurrent = id === category
+                    return (
+                        <button key={id} onClick={() => onSwitchCategory(CATEGORY_ORDER.indexOf(id) - CATEGORY_ORDER.indexOf(category))}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${isCurrent ? 'text-white' : 'text-white/40 hover:text-white/70 bg-white/5'
+                                }`}
+                            style={isCurrent ? { background: itemMeta.color } : {}}>
+                            <itemMeta.icon className="w-3.5 h-3.5" />
+                            {itemMeta.label}
+                        </button>
+                    )
+                })}
             </div>
 
             {slides.length === 0 ? (
