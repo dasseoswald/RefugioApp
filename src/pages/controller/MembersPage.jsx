@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { getMembers, createMember, updateMember, toggleMemberActive, getAttendancesByMember, getMemberRefugio, OPERATIONAL_GROUPS, WELCOME_CHECK_ACTIONS } from '../../data/mockData.js'
+import { getMembers, createMember, updateMember, toggleMemberActive, deleteMember, getAttendancesByMember, getMemberRefugio, OPERATIONAL_GROUPS, WELCOME_CHECK_ACTIONS } from '../../data/mockData.js'
 import Modal from '../../components/ui/Modal.jsx'
-import { Search, UserPlus, Edit2, ToggleLeft, ToggleRight, Users, Filter, ChevronLeft, ChevronRight, FileUser, Home, X, CheckCircle2, Circle } from 'lucide-react'
+import { Search, UserPlus, Edit2, ToggleLeft, ToggleRight, Users, Filter, ChevronLeft, ChevronRight, FileUser, Home, X, CheckCircle2, Circle, Trash2, AlertTriangle } from 'lucide-react'
 
 const MEMBER_TYPES = ['Miembro Activo', 'Miembro Inactivo', 'Visitante', 'Servidor', 'Líder', 'Pastor']
 const CIVIL_STATUSES = ['Soltero', 'Casado', 'Viudo', 'Divorciado']
@@ -22,6 +22,7 @@ export default function MembersPage({ canToggleActive = false }) {
     const [form, setForm] = useState(EMPTY_FORM)
     const [formError, setFormError] = useState('')
     const [page, setPage] = useState(1)
+    const [deletingMember, setDeletingMember] = useState(null)
     const perPage = 8
 
     useEffect(() => { refreshMembers() }, [])
@@ -64,6 +65,13 @@ export default function MembersPage({ canToggleActive = false }) {
 
     const handleToggleActive = (id) => {
         toggleMemberActive(id)
+        refreshMembers()
+    }
+
+    const handleConfirmDelete = () => {
+        if (!deletingMember) return
+        deleteMember(deletingMember.id)
+        setDeletingMember(null)
         refreshMembers()
     }
 
@@ -209,6 +217,11 @@ export default function MembersPage({ canToggleActive = false }) {
                                                         {member.is_active ? <ToggleRight className="w-5 h-5 text-[#13CD68]" /> : <ToggleLeft className="w-5 h-5 text-[#6E6E6E]" />}
                                                     </button>
                                                 )}
+                                                {canToggleActive && (
+                                                    <button onClick={() => setDeletingMember(member)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-red-50 transition-colors cursor-pointer" title="Eliminar Miembro">
+                                                        <Trash2 className="w-4 h-4 text-[#E74C3C]" />
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -308,6 +321,26 @@ export default function MembersPage({ canToggleActive = false }) {
                     <button onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 rounded-xl border-2 border-gray-200 text-[#6E6E6E] font-medium text-sm hover:bg-gray-50 transition-colors cursor-pointer">Cancelar</button>
                     <button onClick={handleSave} className="px-5 py-2.5 rounded-xl text-white font-medium text-sm transition-all hover:shadow-lg cursor-pointer" style={{ background: 'linear-gradient(135deg, #2696D2, #1D74A8)' }}>
                         {editingMember ? 'Guardar Cambios' : 'Crear Miembro'}
+                    </button>
+                </div>
+            </Modal>
+
+            {/* Confirmación de eliminación */}
+            <Modal isOpen={!!deletingMember} onClose={() => setDeletingMember(null)} title="Eliminar Miembro">
+                <div className="space-y-4">
+                    <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-[#FADBD8] text-sm text-[#111111]">
+                        <AlertTriangle className="w-5 h-5 text-[#E74C3C] flex-shrink-0 mt-0.5" />
+                        <span>
+                            Esta acción es permanente. Se eliminará a <strong>{deletingMember?.full_name}</strong> junto con su historial de asistencias, hoja de vida, notas de perfil e inscripciones a grupos. Si tiene una cuenta de usuario vinculada, quedará desvinculada.
+                        </span>
+                    </div>
+                </div>
+                <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+                    <button onClick={() => setDeletingMember(null)} className="px-5 py-2.5 rounded-xl border-2 border-gray-200 text-[#6E6E6E] font-medium text-sm hover:bg-gray-50 cursor-pointer">Cancelar</button>
+                    <button onClick={handleConfirmDelete}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-medium text-sm hover:shadow-lg cursor-pointer"
+                        style={{ background: '#E74C3C' }}>
+                        <Trash2 className="w-4 h-4" /> Eliminar Definitivamente
                     </button>
                 </div>
             </Modal>

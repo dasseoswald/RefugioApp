@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
+import { getStorage } from 'firebase/storage'
 
 const firebaseConfig = {
     apiKey: 'AIzaSyAp11YHROEzyH_KmIti6KxDbytqgdENp1I',
@@ -18,4 +19,5 @@ export const auth = getAuth(app)
 setPersistence(auth, browserLocalPersistence).catch(err => console.error('No se pudo configurar la persistencia de sesión', err))
 export const googleProvider = new GoogleAuthProvider()
 export const db = getFirestore(app)
+export const storage = getStorage(app)
 export { app, firebaseConfig }

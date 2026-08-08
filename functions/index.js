@@ -1,10 +1,82 @@
 const { onDocumentCreated } = require('firebase-functions/v2/firestore')
+const { onSchedule } = require('firebase-functions/v2/scheduler')
 const { initializeApp } = require('firebase-admin/app')
 const { getFirestore } = require('firebase-admin/firestore')
 const { getMessaging } = require('firebase-admin/messaging')
 
 initializeApp()
 const db = getFirestore()
+
+const SERVICE_TIMEZONE = 'America/Santiago'
+
+// Debe coincidir con SERVICE_TYPES en src/pages/admin/ServicesPage.jsx.
+const SERVICE_TYPES = {
+    sunday: { weekday: 0, defaultName: 'Servicio Dominical', starts_at: '07:00', ends_at: '13:00' },
+    thursday: { weekday: 4, defaultName: 'Servicio de Jueves', starts_at: '20:00', ends_at: '22:00' },
+}
+
+function formatDateParts(y, m, d) {
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+
+// Se ejecuta todos los días a las 06:00 hora de Chile. Para cada tipo de
+// servicio (domingo, jueves), si hoy es el día anterior (sábado o miércoles),
+// busca (o crea, si no existe) el servicio de mañana y lo activa —
+// desactivando cualquier otro servicio activo del mismo tipo, igual que el
+// botón manual de activar/desactivar.
+exports.activateUpcomingServices = onSchedule({ schedule: 'every day 06:00', timeZone: SERVICE_TIMEZONE }, async () => {
+    const todayStr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: SERVICE_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date())
+    const [ty, tm, td] = todayStr.split('-').map(Number)
+    const today = new Date(ty, tm - 1, td)
+    const todayWeekday = today.getDay()
+
+    for (const [serviceType, cfg] of Object.entries(SERVICE_TYPES)) {
+        const dayBefore = (cfg.weekday - 1 + 7) % 7
+        if (todayWeekday !== dayBefore) continue
+
+        const tomorrow = new Date(today)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        const targetDate = formatDateParts(tomorrow.getFullYear(), tomorrow.getMonth() + 1, tomorrow.getDate())
+
+        const existingSnap = await db.collection('services')
+            .where('service_type', '==', serviceType)
+            .where('service_date', '==', targetDate)
+            .limit(1)
+            .get()
+
+        let serviceId
+        if (!existingSnap.empty) {
+            serviceId = existingSnap.docs[0].id
+        } else {
+            const newRef = db.collection('services').doc()
+            await newRef.set({
+                name: cfg.defaultName,
+                service_date: targetDate,
+                service_type: serviceType,
+                pastor_name: '',
+                starts_at: cfg.starts_at,
+                ends_at: cfg.ends_at,
+                is_active: false,
+                created_at: new Date().toISOString(),
+            })
+            serviceId = newRef.id
+        }
+
+        const activeSnap = await db.collection('services')
+            .where('service_type', '==', serviceType)
+            .where('is_active', '==', true)
+            .get()
+
+        const batch = db.batch()
+        activeSnap.forEach(doc => {
+            if (doc.id !== serviceId) batch.update(doc.ref, { is_active: false })
+        })
+        batch.update(db.collection('services').doc(serviceId), { is_active: true })
+        await batch.commit()
+    }
+})
 
 // Debe coincidir con OPERATIONAL_GROUPS en src/data/mockData.js (id -> field).
 const GROUP_FIELDS = {

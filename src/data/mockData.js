@@ -1519,6 +1519,89 @@ export function setEventRegistrationPaymentMethod(registrationId, method) {
     return reg
 }
 
+// ---- Anuncios (Presentación en vivo) ----
+// Anuncios de eventos recurrentes de la iglesia (jueves, escuela del
+// discípulo, jóvenes, etc.) que se proyectan a pantalla completa junto con
+// Bienvenida/Oración/Gratitud. Cada uno puede tener una foto o video de
+// fondo (subido a Firebase Storage desde PresentationPage.jsx, que guarda
+// aquí la URL de descarga y la ruta en Storage para poder borrarlo después).
+let ANNOUNCEMENTS = []
+
+const DEFAULT_ANNOUNCEMENTS = [
+    { title: 'Servicio del Jueves', subtitle: '20:00 hrs' },
+    { title: 'Escuela del Discípulo', subtitle: 'Viernes · 20:00 hrs' },
+    { title: 'Jóvenes', subtitle: 'Sábado · 20:00 hrs' },
+    { title: 'Buena Tierra', subtitle: 'Domingo · 11:30 hrs' },
+    { title: 'Culto Principal', subtitle: 'Domingo · 18:00 hrs' },
+]
+
+function announcementDocRef(id) { return doc(db, 'announcements', id) }
+
+export function getAnnouncements() { return [...ANNOUNCEMENTS].sort((a, b) => a.order - b.order) }
+
+export function createAnnouncement({ title, subtitle, background_type, background_url, background_path }) {
+    const id = `ann-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    const order = ANNOUNCEMENTS.length > 0 ? Math.max(...ANNOUNCEMENTS.map(a => a.order)) + 1 : 0
+    const announcement = {
+        id, title, subtitle: subtitle || '',
+        background_type: background_type || null,
+        background_url: background_url || null,
+        background_path: background_path || null,
+        order,
+        created_at: new Date().toISOString(),
+    }
+    ANNOUNCEMENTS = [...ANNOUNCEMENTS, announcement]
+    const { id: _id, ...rest } = announcement
+    setDoc(announcementDocRef(id), rest).catch(err => console.error('No se pudo guardar el anuncio', err))
+    notifyAnnouncementListeners()
+    return announcement
+}
+
+export function deleteAnnouncement(id) {
+    ANNOUNCEMENTS = ANNOUNCEMENTS.filter(a => a.id !== id)
+    deleteDoc(announcementDocRef(id)).catch(err => console.error('No se pudo eliminar el anuncio', err))
+    notifyAnnouncementListeners()
+}
+
+let announcementListeners = []
+let announcementsSyncStarted = false
+let announcementsLoaded = false
+
+function notifyAnnouncementListeners() { announcementListeners.forEach(fn => fn()) }
+
+export function isAnnouncementsLoaded() { return announcementsLoaded }
+
+function startAnnouncementsSync() {
+    if (announcementsSyncStarted) return
+    announcementsSyncStarted = true
+    onSnapshot(collection(db, 'announcements'), async (snap) => {
+        if (snap.empty && !announcementsLoaded) {
+            try {
+                const batch = writeBatch(db)
+                DEFAULT_ANNOUNCEMENTS.forEach((a, i) => {
+                    const id = `ann-default-${i + 1}`
+                    batch.set(doc(db, 'announcements', id), {
+                        title: a.title, subtitle: a.subtitle, background_type: null,
+                        background_url: null, background_path: null, order: i,
+                        created_at: new Date().toISOString(),
+                    })
+                })
+                await batch.commit()
+            } catch (e) { console.error('No se pudieron sembrar los anuncios iniciales', e) }
+            return
+        }
+        ANNOUNCEMENTS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        announcementsLoaded = true
+        notifyAnnouncementListeners()
+    }, (err) => { console.error('Error sincronizando anuncios', err); announcementsLoaded = true; notifyAnnouncementListeners() })
+}
+
+export function subscribeAnnouncements(callback) {
+    announcementListeners.push(callback)
+    startAnnouncementsSync()
+    return () => { announcementListeners = announcementListeners.filter(fn => fn !== callback) }
+}
+
 // ---- Finanzas (Tesorero): ofrendas y diezmos ----
 // Colecciones confidenciales — las reglas de seguridad de Firestore las
 // restringen exclusivamente al rol "tesorero" (ni el administrador puede
