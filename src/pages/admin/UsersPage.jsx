@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { getUsers, getMembers, createUser, updateUserProfile, isUserOnline } from '../../data/mockData.js'
+import { functions } from '../../firebase.js'
+import { httpsCallable } from 'firebase/functions'
 import UserAvatar from '../../components/ui/UserAvatar.jsx'
 import Modal from '../../components/ui/Modal.jsx'
 import { Shield, UserPlus, Edit2, Mail, UserCheck, CheckCircle2, Landmark } from 'lucide-react'
@@ -89,10 +91,29 @@ export default function UsersPage() {
         doCreateUser()
     }
 
-    const applyRoleChange = (targetUser, newRole) => {
-        updateUserProfile(targetUser.id, { role: newRole })
-        refreshData()
-        showNotification(`${targetUser.name} ahora es ${roleConfig[newRole].label}`)
+    // El cambio de rol de una cuenta que YA inició sesión pasa por la función
+    // en la nube setUserRole (que valida en el servidor que quien llama es
+    // administrador) en vez de escribir userRoles directamente desde el
+    // cliente — esa escritura directa era justamente la falla de seguridad
+    // que permitía a cualquiera autoasignarse el rol Tesorero. Si la cuenta
+    // todavía no tiene uid real (fue precreada y la persona nunca inició
+    // sesión), basta con el documento local: el rol se reflejará en
+    // userRoles automáticamente la primera vez que esa persona entre.
+    const applyRoleChange = async (targetUser, newRole) => {
+        if (!targetUser.auth_uid) {
+            updateUserProfile(targetUser.id, { role: newRole })
+            refreshData()
+            showNotification(`${targetUser.name} ahora es ${roleConfig[newRole].label}`)
+            return
+        }
+        try {
+            const callSetUserRole = httpsCallable(functions, 'setUserRole')
+            await callSetUserRole({ userId: targetUser.id, uid: targetUser.auth_uid, role: newRole })
+            refreshData()
+            showNotification(`${targetUser.name} ahora es ${roleConfig[newRole].label}`)
+        } catch (err) {
+            showNotification(err.message || 'No se pudo cambiar el rol.', 'error')
+        }
     }
 
     // Asignar (o quitar) el rol de Tesorero exige que el administrador
@@ -122,7 +143,7 @@ export default function UsersPage() {
         if (pendingRoleChange.type === 'create') {
             doCreateUser()
         } else {
-            applyRoleChange(pendingRoleChange.targetUser, pendingRoleChange.newRole)
+            await applyRoleChange(pendingRoleChange.targetUser, pendingRoleChange.newRole)
         }
         setPendingRoleChange(null)
     }

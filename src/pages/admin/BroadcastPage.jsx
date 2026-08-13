@@ -54,6 +54,10 @@ export default function BroadcastPage() {
             content: content.trim(),
             author_name: user?.name,
             author_id: user?.id,
+            // El backend revalida este campo (uid de Firebase Auth, no el id
+            // interno de la app) antes de enviar la notificación push, para
+            // que no se pueda suplantar el origen del aviso.
+            created_by: user?.auth_uid,
             media_url: mediaBase64,
             media_type: mediaType,
             // Si se envió a todos los grupos, se marca como mensaje general

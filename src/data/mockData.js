@@ -659,16 +659,19 @@ export function saveFcmToken(userId, token) {
 // Los documentos de "users" están indexados por un id interno de la app
 // (p. ej. "user-1730..."), no por el uid de Firebase Auth, así que las
 // reglas de seguridad no pueden usar get(/databases/.../users/$(uid)) para
-// saber el rol de quien hace la petición. Por eso mantenemos esta colección
-// aparte, indexada por uid, que solo guarda el rol — la usan las reglas para
-// restringir Finanzas (ofrendas/diezmos) al rol tesorero, sin excepción ni
-// siquiera para administradores.
-function userRoleDocRef(uid) { return doc(db, 'userRoles', uid) }
-
-function syncUserRole(uid, role) {
-    if (!uid) return
-    setDoc(userRoleDocRef(uid), { role }).catch(err => console.error('No se pudo sincronizar el rol de seguridad', err))
-}
+// saber el rol de quien hace la petición. Por eso existe "userRoles", una
+// colección aparte indexada por uid, que solo guarda el rol — la usan las
+// reglas para restringir Finanzas (ofrendas/diezmos) al rol tesorero, sin
+// excepción ni siquiera para administradores.
+//
+// El cliente YA NO escribe esta colección directamente (antes lo hacía
+// aquí, y esa escritura sin restricción era justamente la falla de
+// seguridad que le permitía a cualquier usuario autoasignarse el rol
+// Tesorero). Ahora se mantiene sincronizada desde el backend: la función
+// syncUserRoleOnUserWrite la actualiza automáticamente cada vez que cambia
+// el documento de "users" (alta de cuenta nueva o cuenta antigua que recién
+// consigue su auth_uid), y la función setUserRole la actualiza cuando un
+// administrador cambia el rol de alguien (ver src/pages/admin/UsersPage.jsx).
 
 export function createOrGetUserForFirebaseAccount({ uid, email: rawEmail, displayName, photoURL }) {
     const email = (rawEmail || '').trim().toLowerCase()
@@ -677,7 +680,6 @@ export function createOrGetUserForFirebaseAccount({ uid, email: rawEmail, displa
         const patch = {}
         if (photoURL && existingUser.photo_url !== photoURL) patch.photo_url = photoURL
         if (uid && existingUser.auth_uid !== uid) patch.auth_uid = uid
-        syncUserRole(uid, existingUser.role)
         if (Object.keys(patch).length > 0) {
             const updated = { ...existingUser, ...patch }
             USERS = USERS.map(u => (u.id === existingUser.id ? updated : u))
@@ -714,17 +716,19 @@ export function createOrGetUserForFirebaseAccount({ uid, email: rawEmail, displa
     USERS = [...USERS, newUser]
     const { id, ...rest } = newUser
     setDoc(userDocRef(id), rest).catch(err => console.error('No se pudo guardar el usuario', err))
-    syncUserRole(uid, 'attendee')
     return { ...newUser }
 }
 
+// Nota: para cambiar el ROL de una cuenta que ya inició sesión, usar la
+// función en la nube setUserRole en vez de esto (ver UsersPage.jsx) — este
+// helper sigue sirviendo para el resto de los campos del perfil (nombre,
+// vínculo a miembro, tokens, etc.).
 export function updateUserProfile(userId, data) {
     const index = USERS.findIndex(u => u.id === userId)
     if (index === -1) return null
     const updated = { ...USERS[index], ...data }
     USERS = USERS.map((u, i) => (i === index ? updated : u))
     updateDoc(userDocRef(userId), data).catch(err => console.error('No se pudo sincronizar el usuario', err))
-    if (data.role && updated.auth_uid) syncUserRole(updated.auth_uid, data.role)
     return { ...updated }
 }
 

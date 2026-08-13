@@ -22,3 +22,14 @@ npm-debug.log*
 
 # Vercel
 .vercel
+
+# Firebase - credenciales (nunca versionar)
+*serviceAccount*.json
+*firebase-adminsdk*.json
+*-adminsdk-*.json
+
+# Firebase - estado y cache local
+.firebase/
+firestore-debug.log
+ui-debug.log
+.runtimeconfig.json
