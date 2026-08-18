@@ -53,9 +53,15 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="min-h-screen flex" style={{ background: 'linear-gradient(135deg, #010101 0%, #111111 40%, #2696D2 100%)' }}>
+        <div className="min-h-screen relative flex overflow-hidden">
+            <video autoPlay muted loop playsInline
+                className="absolute inset-0 w-full h-full object-cover z-0"
+                src="/videofondo.mp4" />
+            <div className="absolute inset-0 z-0"
+                style={{ background: 'linear-gradient(135deg, rgba(1,1,1,0.85) 0%, rgba(17,17,17,0.78) 40%, rgba(38,150,210,0.72) 100%)' }} />
+
             {/* Left - Branding */}
-            <div className="hidden lg:flex flex-1 flex-col justify-center items-center p-12 text-white">
+            <div className="hidden lg:flex flex-1 flex-col justify-center items-center p-12 text-white relative z-10">
                 <div className="max-w-md text-center">
                     <div className="w-20 h-20 mx-auto mb-8 rounded-2xl flex items-center justify-center bg-white/10 backdrop-blur-sm border border-white/20">
                         <img src={logo} alt="Refugio App" className="w-14 h-14 object-contain" />
@@ -72,7 +78,7 @@ export default function LoginPage() {
             </div>
 
             {/* Right - Login Form */}
-            <div className="flex-1 flex items-center justify-center p-6">
+            <div className="flex-1 flex items-center justify-center p-6 relative z-10">
                 <div className="w-full max-w-md">
                     <div className="bg-white rounded-3xl shadow-2xl p-8 animate-scale-in">
                         {/* Mobile logo */}

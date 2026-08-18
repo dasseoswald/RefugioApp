@@ -50,9 +50,13 @@ const SPLASH_DURATION_MS = 2000
 
 function SplashScreen() {
     return (
-        <div className="min-h-screen flex items-center justify-center animate-fade-in"
-            style={{ background: 'linear-gradient(180deg, #010101 0%, #111111 100%)' }}>
-            <img src={logo} alt="Refugio App" className="w-28 h-28 object-contain" />
+        <div className="min-h-screen relative flex items-center justify-center animate-fade-in overflow-hidden">
+            <video autoPlay muted loop playsInline
+                className="absolute inset-0 w-full h-full object-cover z-0"
+                src="/videofondo.mp4" />
+            <div className="absolute inset-0 z-0"
+                style={{ background: 'linear-gradient(180deg, rgba(1,1,1,0.8) 0%, rgba(17,17,17,0.8) 100%)' }} />
+            <img src={logo} alt="Refugio App" className="w-28 h-28 object-contain relative z-10" />
         </div>
     )
 }
