@@ -34,7 +34,16 @@ import { OPERATIONAL_GROUPS } from './data/mockData.js'
 
 function AppLayout({ children }) {
     return (
-        <div className="min-h-screen bg-[#EDEDED]">
+        <div className="min-h-screen relative">
+            {/* Fondo de video detrás de todas las pantallas de la app (no solo
+                login/carga). fixed para no recargarse al hacer scroll, con un
+                velo gris casi opaco encima para que tablas y formularios
+                sigan siendo legibles — solo se nota en los espacios entre
+                tarjetas. */}
+            <video autoPlay muted loop playsInline
+                className="fixed inset-0 w-full h-full object-cover -z-10"
+                src="/videofondo.mp4" />
+            <div className="fixed inset-0 -z-10" style={{ background: 'rgba(237,237,237,0.9)' }} />
             <Sidebar />
             <main className="min-h-screen p-4 pt-[calc(5rem_+_env(safe-area-inset-top))] lg:ml-64 lg:p-8">
                 {children}
