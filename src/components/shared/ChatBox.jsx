@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { MessageCircle, Send, Paperclip, X } from 'lucide-react'
+import { MessageCircle, Send, Paperclip, X, Trash2 } from 'lucide-react'
 
-export default function ChatBox({ listenFn, sendFn, heightClass = 'h-[500px]', emptyMessage = 'Envía el primer mensaje' }) {
+export default function ChatBox({ listenFn, sendFn, deleteFn, heightClass = 'h-[500px]', emptyMessage = 'Envía el primer mensaje' }) {
     const { user } = useAuth()
+    const isAdmin = user?.role === 'admin'
     const [messages, setMessages] = useState([])
     const [msgContent, setMsgContent] = useState('')
     const [mediaBase64, setMediaBase64] = useState(null)
     const [mediaType, setMediaType] = useState(null)
+    const [confirmDeleteId, setConfirmDeleteId] = useState(null)
     const fileInputRef = useRef(null)
     const chatEndRef = useRef(null)
 
@@ -42,11 +44,17 @@ export default function ChatBox({ listenFn, sendFn, heightClass = 'h-[500px]', e
             sender_id: user.id,
             sender_name: user.name,
             sender_photo: user.photo_url,
+            sender_uid: user.auth_uid,
             media_url: mediaBase64,
             media_type: mediaType,
         })
         setMsgContent('')
         clearMedia()
+    }
+
+    const handleDelete = (messageId) => {
+        deleteFn?.(messageId)
+        setConfirmDeleteId(null)
     }
 
     const handleKeyDown = (e) => {
@@ -68,14 +76,23 @@ export default function ChatBox({ listenFn, sendFn, heightClass = 'h-[500px]', e
                     messages.map((msg, index) => {
                         const isMine = msg.sender_id === user.id
                         const showName = index === 0 || messages[index - 1].sender_id !== msg.sender_id
+                        const canDelete = !!deleteFn && (isMine || isAdmin)
+                        const confirming = confirmDeleteId === msg.id
 
                         return (
-                            <div key={msg.id} className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
+                            <div key={msg.id} className={`group flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
                                 {showName && !isMine && <span className="text-xs font-semibold text-[#6E6E6E] mb-1 ml-1">{msg.sender_name}</span>}
 
                                 <div className={`relative max-w-[75%] rounded-2xl px-4 py-2 ${
                                     isMine ? 'text-white' : 'bg-white text-[#111111] border border-gray-100 shadow-sm'
                                 }`} style={isMine ? { background: '#2696D2' } : {}}>
+
+                                    {canDelete && (
+                                        <button onClick={() => setConfirmDeleteId(msg.id)} title="Borrar mensaje"
+                                            className={`absolute -top-2.5 ${isMine ? '-left-2.5' : '-right-2.5'} w-6 h-6 rounded-full bg-white border border-gray-200 shadow-sm items-center justify-center text-[#6E6E6E] hover:text-[#E74C3C] hover:border-[#E74C3C] cursor-pointer transition-colors hidden group-hover:flex`}>
+                                            <Trash2 className="w-3 h-3" />
+                                        </button>
+                                    )}
 
                                     {msg.media_url && msg.media_type?.startsWith('image/') && (
                                         <img src={msg.media_url} alt="Adjunto" className="w-full max-w-sm rounded-xl mb-2" />
@@ -88,9 +105,16 @@ export default function ChatBox({ listenFn, sendFn, heightClass = 'h-[500px]', e
 
                                     {msg.content && <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>}
 
-                                    <div className={`text-[10px] mt-1 text-right ${isMine ? 'text-white/70' : 'text-[#6E6E6E]'}`}>
-                                        {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                                    </div>
+                                    {confirming ? (
+                                        <div className={`flex items-center gap-2 mt-1 justify-end`}>
+                                            <button onClick={() => handleDelete(msg.id)} className={`text-[10px] font-semibold underline cursor-pointer ${isMine ? 'text-white' : 'text-[#E74C3C]'}`}>Borrar</button>
+                                            <button onClick={() => setConfirmDeleteId(null)} className={`text-[10px] font-semibold underline cursor-pointer ${isMine ? 'text-white/80' : 'text-[#6E6E6E]'}`}>Cancelar</button>
+                                        </div>
+                                    ) : (
+                                        <div className={`text-[10px] mt-1 text-right ${isMine ? 'text-white/70' : 'text-[#6E6E6E]'}`}>
+                                            {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )

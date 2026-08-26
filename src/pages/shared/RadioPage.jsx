@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Radio, Play, Pause, Volume2, VolumeX } from 'lucide-react'
-import { listenToRadioMessages, sendRadioMessage } from '../../data/mockData.js'
+import { listenToRadioMessages, sendRadioMessage, deleteRadioMessage } from '../../data/mockData.js'
 import ChatBox from '../../components/shared/ChatBox.jsx'
 
 const STREAM_URL = 'https://comunikadostreaming.us:10948/;'
@@ -117,6 +117,7 @@ export default function RadioPage() {
                 <ChatBox
                     listenFn={listenToRadioMessages}
                     sendFn={sendRadioMessage}
+                    deleteFn={deleteRadioMessage}
                     heightClass="h-[420px]"
                     emptyMessage="Comenta mientras escuchas la radio"
                 />

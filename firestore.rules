@@ -111,12 +111,27 @@ service cloud.firestore {
       allow update, delete: if hasRole('admin');
     }
 
+    // ---------- Chats en vivo (comunidad y radio) ----------
+    // Cualquier miembro puede borrar SU PROPIO mensaje (sender_uid es el uid
+    // real de Firebase Auth de quien lo envió, no el id interno de la app);
+    // un administrador puede borrar cualquiera, incluida una limpieza total.
+    match /generalMessages/{docId} {
+      allow read, create: if isMiembro();
+      allow delete: if hasRole('admin') || (isMiembro() && resource.data.sender_uid == request.auth.uid);
+      allow update: if false;
+    }
+    match /radioMessages/{docId} {
+      allow read, create: if isMiembro();
+      allow delete: if hasRole('admin') || (isMiembro() && resource.data.sender_uid == request.auth.uid);
+      allow update: if false;
+    }
+
     // ---------- Resto de colecciones ----------
-    // memberProfiles, services, chats, foro, anuncios, etc.: cualquier
-    // miembro aprobado (no cualquier cuenta de Google autenticada).
+    // memberProfiles, services, foro, anuncios, etc.: cualquier miembro
+    // aprobado (no cualquier cuenta de Google autenticada).
     match /{collection}/{docId} {
       allow read, write: if isMiembro()
-        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices']);
+        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages']);
     }
   }
 }

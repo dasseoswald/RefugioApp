@@ -5,7 +5,7 @@
  * memoria + localStorage por ahora, pendiente de migración.
  */
 import { db } from '../firebase.js'
-import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch, arrayUnion, query, orderBy, limit } from 'firebase/firestore'
+import { collection, doc, setDoc, updateDoc, deleteDoc, getDocs, onSnapshot, writeBatch, arrayUnion, query, orderBy, limit } from 'firebase/firestore'
 
 // Ubicación de la iglesia (Un Refugio para la Familia, Coelemu) para el
 // registro automático de asistencia por GPS. El radio incluye margen para
@@ -562,17 +562,32 @@ function createChatChannel(collectionName) {
                 callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
             }, (err) => console.error(`Error sincronizando el chat (${collectionName})`, err))
         },
-        send({ content, sender_id, sender_name, sender_photo, media_url, media_type }) {
+        send({ content, sender_id, sender_name, sender_photo, sender_uid, media_url, media_type }) {
             const messagesRef = collection(db, collectionName)
             setDoc(doc(messagesRef), {
                 content: content || '',
                 sender_id,
                 sender_name,
                 sender_photo: sender_photo || null,
+                // uid real de Firebase Auth (no el id interno de la app) — es
+                // contra lo que compara la regla de seguridad para saber si
+                // quien borra es el dueño del mensaje.
+                sender_uid: sender_uid || null,
                 media_url: media_url || null,
                 media_type: media_type || null,
                 created_at: new Date().toISOString(),
             }).catch(err => console.error(`No se pudo enviar el mensaje (${collectionName})`, err))
+        },
+        // El dueño del mensaje o un administrador pueden borrarlo (ver regla
+        // de seguridad de generalMessages/radioMessages en firestore.rules).
+        delete(messageId) {
+            return deleteDoc(doc(db, collectionName, messageId))
+                .catch(err => console.error(`No se pudo borrar el mensaje (${collectionName})`, err))
+        },
+        // Borra TODOS los mensajes del canal de una vez (limpieza manual).
+        async clearAll() {
+            const snap = await getDocs(collection(db, collectionName))
+            await Promise.all(snap.docs.map(d => deleteDoc(d.ref)))
         },
     }
 }
@@ -580,9 +595,13 @@ function createChatChannel(collectionName) {
 const generalChat = createChatChannel('generalMessages')
 export const listenToGeneralMessages = generalChat.listen
 export const sendGeneralMessage = generalChat.send
+export const deleteGeneralMessage = generalChat.delete
+export const clearGeneralMessages = generalChat.clearAll
 
 const radioChat = createChatChannel('radioMessages')
 export const listenToRadioMessages = radioChat.listen
+export const deleteRadioMessage = radioChat.delete
+export const clearRadioMessages = radioChat.clearAll
 export const sendRadioMessage = radioChat.send
 
 // ---- Foro abierto (preguntas de la congregación, anónimas o no) ----
