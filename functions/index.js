@@ -1,7 +1,7 @@
 // Runtime Node.js 22 (ver firebase.json) — RA-06 del informe de seguridad.
 const { onDocumentCreated, onDocumentWritten } = require('firebase-functions/v2/firestore')
 const { onSchedule } = require('firebase-functions/v2/scheduler')
-const { onCall, HttpsError } = require('firebase-functions/v2/https')
+const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
 const { initializeApp } = require('firebase-admin/app')
 const { getFirestore } = require('firebase-admin/firestore')
 const { getMessaging } = require('firebase-admin/messaging')
@@ -177,30 +177,41 @@ exports.onGroupNoticeCreated = onDocumentCreated('groupNotices/{noticeId}', asyn
 
     const autorId = notice.created_by
     if (!autorId) {
+        console.log(`onGroupNoticeCreated: borrado, sin created_by (noticeId=${event.params.noticeId})`)
         await event.data.ref.delete().catch(() => {})
         return
     }
     const autorRoleSnap = await db.collection('userRoles').doc(autorId).get()
     if (!autorRoleSnap.exists || !ROLES_QUE_PUEDEN_AVISAR.includes(autorRoleSnap.data().role)) {
+        console.log(`onGroupNoticeCreated: borrado, autor no autorizado (autorId=${autorId}, existe=${autorRoleSnap.exists}, rol=${autorRoleSnap.exists ? autorRoleSnap.data().role : 'n/a'})`)
         await event.data.ref.delete().catch(() => {})
         return
     }
 
-    const field = GROUP_FIELDS[notice.group_id]
-    if (!field) return
-
-    const membersSnap = await db.collection('members').where(field, '==', true).get()
-    const memberIds = membersSnap.docs.map(d => d.id)
-    if (memberIds.length === 0) return
-
     const tokens = []
-    for (const idsChunk of chunk(memberIds, 10)) {
-        const usersSnap = await db.collection('users').where('member_id', 'in', idsChunk).get()
-        usersSnap.forEach(doc => {
-            const userTokens = doc.data().fcm_tokens || []
-            tokens.push(...userTokens)
-        })
+    if (notice.to_all_users) {
+        // Envío a todos los usuarios con cuenta, sin mirar sus grupos.
+        const usersSnap = await db.collection('users').get()
+        usersSnap.forEach(doc => tokens.push(...(doc.data().fcm_tokens || [])))
+        console.log(`onGroupNoticeCreated: modo TODOS los usuarios, usuarios=${usersSnap.size} tokens=${tokens.length}`)
+    } else {
+        const field = GROUP_FIELDS[notice.group_id]
+        if (!field) {
+            console.log(`onGroupNoticeCreated: sin campo de grupo para group_id=${notice.group_id}`)
+            return
+        }
+
+        const membersSnap = await db.collection('members').where(field, '==', true).get()
+        const memberIds = membersSnap.docs.map(d => d.id)
+        console.log(`onGroupNoticeCreated: group_id=${notice.group_id} field=${field} miembros=${memberIds.length}`)
+        if (memberIds.length === 0) return
+
+        for (const idsChunk of chunk(memberIds, 10)) {
+            const usersSnap = await db.collection('users').where('member_id', 'in', idsChunk).get()
+            usersSnap.forEach(doc => tokens.push(...(doc.data().fcm_tokens || [])))
+        }
     }
+    console.log(`onGroupNoticeCreated: tokens encontrados=${tokens.length}`)
     if (tokens.length === 0) return
 
     // Truncados para limitar el abuso del espacio de mensaje (RA-03).
@@ -210,6 +221,10 @@ exports.onGroupNoticeCreated = onDocumentCreated('groupNotices/{noticeId}', asyn
     const response = await getMessaging().sendEachForMulticast({
         tokens,
         notification: { title, body },
+    })
+    console.log(`onGroupNoticeCreated: enviados=${response.successCount} fallidos=${response.failureCount}`)
+    response.responses.forEach((r, i) => {
+        if (!r.success) console.log(`onGroupNoticeCreated: fallo token[${i}] code=${r.error?.code} msg=${r.error?.message}`)
     })
 
     // Limpieza de tokens inválidos/expirados (dispositivo desinstaló la app, etc.)

@@ -1186,6 +1186,14 @@ export function broadcastNoticeToGroups(groupIds, data) {
     return groupIds.map(groupId => createGroupNotice({ ...data, group_id: groupId }))
 }
 
+// A diferencia de broadcastNoticeToGroups (que solo llega a quien tiene
+// marcado alguno de los grupos elegidos), esto envía un único aviso que la
+// función en la nube reparte a TODOS los usuarios con cuenta, sin mirar sus
+// campos de grupo/ministerio para nada.
+export function broadcastNoticeToAllUsers(data) {
+    return [createGroupNotice({ ...data, group_id: null, audience: 'all', to_all_users: true })]
+}
+
 // Avisos relevantes para un miembro: los de sus propios ministerios, más los
 // mensajes generales (audience: 'all', enviados a todos los grupos a la vez)
 // — así también le llegan a quien todavía no está en ningún grupo.
@@ -1199,13 +1207,27 @@ export function getNoticesForMember(member, limit = 10) {
         .slice(0, limit)
 }
 
-export function createGroupNotice(data) {
+// Firestore rechaza cualquier campo en `undefined` (p. ej. created_by si el
+// auth_uid todavía no llegó al estado local) con un error silencioso que el
+// caller nunca ve — se reemplaza por null, que sí es un valor válido.
+function sanitizeForFirestore(data) {
+    const clean = {}
+    for (const [key, value] of Object.entries(data)) clean[key] = value === undefined ? null : value
+    return clean
+}
+
+// Devuelve { notice, writePromise } para que quien llama pueda, si le
+// importa, esperar la escritura real y mostrar un error si Firestore la
+// rechaza — antes se ignoraba el resultado y la UI siempre decía "enviado"
+// aunque la escritura hubiera fallado.
+export function createGroupNotice(rawData) {
+    const data = sanitizeForFirestore(rawData)
     const id = `notice-${Date.now()}-${Math.floor(Math.random() * 1000)}`
     const newNotice = { ...data, id, created_at: new Date().toISOString() }
     GROUP_NOTICES = [...GROUP_NOTICES, newNotice]
-    setDoc(doc(db, 'groupNotices', id), { ...data, created_at: newNotice.created_at })
-        .catch(err => console.error('No se pudo sincronizar el aviso', err))
-    return newNotice
+    const writePromise = setDoc(doc(db, 'groupNotices', id), { ...data, created_at: newNotice.created_at })
+    writePromise.catch(err => console.error('No se pudo sincronizar el aviso', err))
+    return { notice: newNotice, writePromise }
 }
 
 export function getGroupMessages(groupId) {

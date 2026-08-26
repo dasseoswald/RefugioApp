@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { OPERATIONAL_GROUPS, broadcastNoticeToGroups } from '../../data/mockData.js'
+import { OPERATIONAL_GROUPS, broadcastNoticeToGroups, broadcastNoticeToAllUsers } from '../../data/mockData.js'
 import {
-    Megaphone, Send, Image, Paperclip, X, CheckCircle2, CheckSquare, Square,
+    Megaphone, Send, Image, Paperclip, X, CheckCircle2, AlertCircle, CheckSquare, Square,
     BookOpen, Sprout, Users, UserCircle, UserSquare, Baby, Music, Home
 } from 'lucide-react'
 
@@ -16,7 +16,9 @@ export default function BroadcastPage() {
     const [mediaType, setMediaType] = useState(null)
     const [mediaName, setMediaName] = useState('')
     const [selectedGroups, setSelectedGroups] = useState(OPERATIONAL_GROUPS.map(g => g.id))
+    const [sendToAllUsers, setSendToAllUsers] = useState(false)
     const [notification, setNotification] = useState(null)
+    const [isSending, setIsSending] = useState(false)
     const fileInputRef = useRef(null)
 
     const allSelected = selectedGroups.length === OPERATIONAL_GROUPS.length
@@ -46,10 +48,11 @@ export default function BroadcastPage() {
         if (fileInputRef.current) fileInputRef.current.value = ''
     }
 
-    const handleSend = () => {
-        if (!title.trim() || !content.trim() || selectedGroups.length === 0) return
+    const handleSend = async () => {
+        if (!title.trim() || !content.trim()) return
+        if (!sendToAllUsers && selectedGroups.length === 0) return
 
-        broadcastNoticeToGroups(selectedGroups, {
+        const payload = {
             title: title.trim(),
             content: content.trim(),
             author_name: user?.name,
@@ -64,13 +67,33 @@ export default function BroadcastPage() {
             // para que también llegue a quienes no tienen ningún ministerio
             // asignado (ver getNoticesForMember).
             audience: allSelected ? 'all' : null,
-        })
+        }
 
-        setNotification({ type: 'success', message: `Aviso enviado a ${selectedGroups.length} grupo${selectedGroups.length === 1 ? '' : 's'} exitosamente` })
-        setTitle('')
-        setContent('')
-        removeAttachedFile()
-        setTimeout(() => setNotification(null), 4000)
+        const results = sendToAllUsers
+            ? broadcastNoticeToAllUsers(payload)
+            : broadcastNoticeToGroups(selectedGroups, payload)
+
+        setIsSending(true)
+        try {
+            // Antes no se esperaba esta escritura, así que si Firestore la
+            // rechazaba (p. ej. permission-denied) la app igual mostraba
+            // "enviado" y nadie se enteraba de que nunca salió nada.
+            await Promise.all(results.map(r => r.writePromise))
+            setNotification({
+                type: 'success',
+                message: sendToAllUsers
+                    ? 'Aviso enviado a todos los usuarios exitosamente'
+                    : `Aviso enviado a ${selectedGroups.length} grupo${selectedGroups.length === 1 ? '' : 's'} exitosamente`,
+            })
+            setTitle('')
+            setContent('')
+            removeAttachedFile()
+        } catch (err) {
+            setNotification({ type: 'error', message: `No se pudo enviar el aviso: ${err.message || err.code || 'error desconocido'}` })
+        } finally {
+            setIsSending(false)
+            setTimeout(() => setNotification(null), 6000)
+        }
     }
 
     return (
@@ -91,8 +114,10 @@ export default function BroadcastPage() {
             </div>
 
             {notification && (
-                <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[#E1F9EC] text-[#111111] animate-fade-in">
-                    <CheckCircle2 className="w-5 h-5 text-[#13CD68]" />
+                <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-[#111111] animate-fade-in ${notification.type === 'error' ? 'bg-[#FADBD8]' : 'bg-[#E1F9EC]'}`}>
+                    {notification.type === 'error'
+                        ? <AlertCircle className="w-5 h-5 text-[#E74C3C]" />
+                        : <CheckCircle2 className="w-5 h-5 text-[#13CD68]" />}
                     <span className="text-sm font-medium">{notification.message}</span>
                 </div>
             )}
@@ -134,6 +159,15 @@ export default function BroadcastPage() {
                         </div>
                     )}
 
+                    <label className="flex items-start gap-3 px-4 py-3 rounded-xl bg-gray-50/50 border-2 border-gray-100 cursor-pointer">
+                        <input type="checkbox" checked={sendToAllUsers} onChange={e => setSendToAllUsers(e.target.checked)}
+                            className="mt-0.5 w-4 h-4 accent-[#2696D2] cursor-pointer" />
+                        <span>
+                            <span className="block text-sm font-medium text-[#111111]">Enviar a TODOS los usuarios</span>
+                            <span className="block text-xs text-[#6E6E6E]">Llega a cada persona con cuenta, sin importar si pertenece a algún ministerio (ignora la lista de grupos de la derecha)</span>
+                        </span>
+                    </label>
+
                     <div className="flex items-center justify-between">
                         <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-2 text-sm text-[#6E6E6E] hover:text-[#2696D2] transition-colors rounded-lg font-medium cursor-pointer">
                             <Image className="w-5 h-5" />
@@ -143,17 +177,22 @@ export default function BroadcastPage() {
 
                         <button
                             onClick={handleSend}
-                            disabled={!title.trim() || !content.trim() || selectedGroups.length === 0}
+                            disabled={isSending || !title.trim() || !content.trim() || (!sendToAllUsers && selectedGroups.length === 0)}
                             className="px-5 py-2.5 rounded-xl font-medium text-white text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer shadow-md hover:shadow-lg"
                             style={{ background: 'linear-gradient(135deg, #2696D2, #1D74A8)' }}
                         >
-                            <Send className="w-4 h-4" /> Enviar a {selectedGroups.length} grupo{selectedGroups.length === 1 ? '' : 's'}
+                            <Send className="w-4 h-4" />
+                            {isSending
+                                ? 'Enviando...'
+                                : sendToAllUsers
+                                    ? 'Enviar a todos los usuarios'
+                                    : `Enviar a ${selectedGroups.length} grupo${selectedGroups.length === 1 ? '' : 's'}`}
                         </button>
                     </div>
                 </div>
 
                 {/* Group selection */}
-                <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] overflow-hidden h-fit">
+                <div className={`bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] overflow-hidden h-fit transition-opacity ${sendToAllUsers ? 'opacity-40 pointer-events-none' : ''}`}>
                     <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                         <h3 className="text-base font-semibold text-[#111111]">Destinatarios</h3>
                         <button onClick={toggleAll} className="text-xs font-medium text-[#2696D2] hover:underline cursor-pointer">
