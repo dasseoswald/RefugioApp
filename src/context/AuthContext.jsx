@@ -8,6 +8,7 @@ import {
     updateProfile as updateFirebaseProfile,
     linkWithCredential,
     reauthenticateWithCredential,
+    sendEmailVerification,
     EmailAuthProvider,
 } from 'firebase/auth'
 import { auth, googleProvider } from '../firebase.js'
@@ -40,6 +41,7 @@ export function AuthProvider({ children }) {
     const [user, setUser] = useState(null)
     const [loading, setLoading] = useState(true)
     const [needsPassword, setNeedsPassword] = useState(false)
+    const [emailVerified, setEmailVerified] = useState(true)
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -57,10 +59,15 @@ export function AuthProvider({ children }) {
                 // le ofrecemos crear una (útil cuando Google no funciona,
                 // p. ej. dentro del navegador de WhatsApp/Instagram).
                 setNeedsPassword(!firebaseUser.providerData.some(p => p.providerId === 'password'))
+                // Con Google el correo ya viene verificado por Google mismo,
+                // así que esto solo aplica de verdad a cuentas de correo y
+                // contraseña sin confirmar todavía.
+                setEmailVerified(firebaseUser.emailVerified)
                 setUser(appUser)
             } else {
                 setUser(null)
                 setNeedsPassword(false)
+                setEmailVerified(true)
             }
             setLoading(false)
         })
@@ -97,6 +104,9 @@ export function AuthProvider({ children }) {
             pendingRegistrationName = name
             const cred = await createUserWithEmailAndPassword(auth, email, password)
             await updateFirebaseProfile(cred.user, { displayName: name })
+            // No bloquea el registro si el envío falla (p. ej. cuota de
+            // Firebase agotada) — es solo un recordatorio, no un requisito.
+            sendEmailVerification(cred.user).catch(err => console.error('No se pudo enviar el correo de verificación', err))
             // La creación/vinculación real del usuario la hace el listener
             // onAuthStateChanged (arriba), que ya recogerá `pendingRegistrationName`.
             return { data: true }
@@ -104,6 +114,25 @@ export function AuthProvider({ children }) {
             pendingRegistrationName = null
             return { error: AUTH_ERROR_MESSAGES[err.code] || 'No se pudo crear la cuenta. Inténtalo de nuevo.' }
         }
+    }, [])
+
+    // Reenvía el correo de verificación a la cuenta actualmente autenticada.
+    const resendVerificationEmail = useCallback(async () => {
+        try {
+            if (!auth.currentUser) return { error: 'No hay usuario autenticado' }
+            await sendEmailVerification(auth.currentUser)
+            return { data: true }
+        } catch (err) {
+            return { error: AUTH_ERROR_MESSAGES[err.code] || 'No se pudo enviar el correo. Intenta de nuevo en unos minutos.' }
+        }
+    }, [])
+
+    // Firebase no avisa solo cuando alguien confirma el correo en otra
+    // pestaña — hay que recargar el usuario y volver a leer emailVerified.
+    const refreshEmailVerified = useCallback(async () => {
+        if (!auth.currentUser) return
+        await auth.currentUser.reload().catch(() => {})
+        setEmailVerified(auth.currentUser.emailVerified)
     }, [])
 
     const setAccountPassword = useCallback(async (password) => {
@@ -146,7 +175,12 @@ export function AuthProvider({ children }) {
         return { data: updatedUser }
     }, [user])
 
-    const value = { user, loading, login, loginWithGoogle, register, logout, updateProfile, needsPassword, setAccountPassword, confirmPassword, isAuthenticated: !!user }
+    const value = {
+        user, loading, login, loginWithGoogle, register, logout, updateProfile,
+        needsPassword, setAccountPassword, confirmPassword, isAuthenticated: !!user,
+        isEmailUnverified: !!user && !emailVerified,
+        resendVerificationEmail, refreshEmailVerified,
+    }
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

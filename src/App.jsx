@@ -30,6 +30,7 @@ import PresentationPage from './pages/PresentationPage.jsx'
 import CheckinPage from './pages/CheckinPage.jsx'
 import OnboardingPrompt from './components/shared/OnboardingPrompt.jsx'
 import SetPasswordPrompt from './components/shared/SetPasswordPrompt.jsx'
+import EmailVerificationBanner from './components/shared/EmailVerificationBanner.jsx'
 import { OPERATIONAL_GROUPS } from './data/mockData.js'
 
 function AppLayout({ children }) {
@@ -46,6 +47,7 @@ function AppLayout({ children }) {
             <div className="fixed inset-0 -z-10" style={{ background: 'rgba(237,237,237,0.9)' }} />
             <Sidebar />
             <main className="min-h-screen p-4 pt-[calc(5rem_+_env(safe-area-inset-top))] lg:ml-64 lg:p-8">
+                <EmailVerificationBanner />
                 {children}
             </main>
             <SetPasswordPrompt />
