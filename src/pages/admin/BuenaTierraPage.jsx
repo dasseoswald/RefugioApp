@@ -10,7 +10,7 @@ import {
 import MemberAutocomplete from '../../components/shared/MemberAutocomplete.jsx'
 import {
     Sprout, UserPlus, Check, Settings, Crown, ChevronDown, ChevronUp,
-    Power, PowerOff, X, Users,
+    Power, PowerOff, X, Users, Lock, Unlock,
 } from 'lucide-react'
 
 const CLASS_ORDER = ['paz', 'alegria', 'faith']
@@ -124,6 +124,17 @@ export default function BuenaTierraPage() {
         updateBuenaTierraClass(classId, { [key]: current.filter(id => id !== memberId) })
     }
 
+    // Cerrar una clase la marca como "terminada" solo para la sesión de HOY
+    // (guarda el id del servicio activo) — apenas se active una sesión nueva
+    // otro día, el id ya no coincide y la clase vuelve a quedar abierta sola,
+    // sin tener que reabrirla a mano cada semana.
+    const isClosed = (cls) => !!service && cls.closed_for_service_id === service.id
+    const toggleClosed = (classId) => {
+        if (!service) return
+        const cls = classById(classId)
+        updateBuenaTierraClass(classId, { closed_for_service_id: isClosed(cls) ? null : service.id })
+    }
+
     const memberName = (id) => members.find(m => m.id === id)?.full_name || 'Miembro'
     const currentLeaderName = settings.leader_member_id ? memberName(settings.leader_member_id) : null
 
@@ -163,26 +174,44 @@ export default function BuenaTierraPage() {
                     const roster = membersInClass(classId)
                     const canManage = canManageClass(classId)
                     const isOpen = openClass === classId
+                    const closed = isClosed(cls)
                     const attendedCount = service ? roster.filter(m => findAttendanceByMemberAndService(m.id, service.id)).length : 0
 
                     return (
                         <div key={classId} className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] overflow-hidden">
-                            <button onClick={() => setOpenClass(isOpen ? null : classId)}
-                                className="w-full flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-gray-50/50 transition-colors">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#E1F9EC]">
+                            <div className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50/50 transition-colors">
+                                <button onClick={() => setOpenClass(isOpen ? null : classId)} className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer text-left">
+                                    <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#E1F9EC] flex-shrink-0">
                                         <Users className="w-4 h-4 text-[#13CD68]" />
                                     </div>
-                                    <div className="text-left">
-                                        <p className="text-base font-semibold text-[#111111]">{cls.name}</p>
+                                    <div className="min-w-0">
+                                        <p className="text-base font-semibold text-[#111111] flex items-center gap-2">
+                                            {cls.name}
+                                            {closed && (
+                                                <span className="flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-gray-100 text-[#6E6E6E]">
+                                                    <Lock className="w-2.5 h-2.5" /> Cerrada
+                                                </span>
+                                            )}
+                                        </p>
                                         <p className="text-xs text-[#6E6E6E]">
                                             {cls.age_range || 'Sin rango de edad definido'} · {roster.length} niño{roster.length === 1 ? '' : 's'}
                                             {service?.is_active && ` · ${attendedCount} presente${attendedCount === 1 ? '' : 's'}`}
                                         </p>
                                     </div>
+                                </button>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                    {canManage && service?.is_active && (
+                                        <button onClick={() => toggleClosed(classId)} title={closed ? 'Reabrir registro' : 'Cerrar registro'}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${closed ? 'bg-[#E1F9EC] text-[#13CD68] hover:bg-[#c9f2dc]' : 'bg-gray-100 text-[#6E6E6E] hover:bg-gray-200'}`}>
+                                            {closed ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                                            {closed ? 'Reabrir' : 'Cerrar registro'}
+                                        </button>
+                                    )}
+                                    <button onClick={() => setOpenClass(isOpen ? null : classId)} className="cursor-pointer p-1">
+                                        {isOpen ? <ChevronUp className="w-4 h-4 text-[#6E6E6E]" /> : <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />}
+                                    </button>
                                 </div>
-                                {isOpen ? <ChevronUp className="w-4 h-4 text-[#6E6E6E]" /> : <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />}
-                            </button>
+                            </div>
 
                             {isOpen && (
                                 <div className="px-6 pb-6 space-y-4 border-t border-gray-100 pt-4">
@@ -216,13 +245,18 @@ export default function BuenaTierraPage() {
                                         <p className="text-sm text-[#6E6E6E]">Solo el maestro, ayudante o líder de esta clase puede tomar asistencia.</p>
                                     ) : (
                                         <div className="space-y-2">
+                                            {closed && (
+                                                <p className="text-xs text-[#6E6E6E] flex items-center gap-1.5 mb-2">
+                                                    <Lock className="w-3 h-3" /> El registro de esta clase está cerrado — usa "Reabrir" arriba para seguir editándolo.
+                                                </p>
+                                            )}
                                             {roster.length === 0 && <p className="text-sm text-[#6E6E6E]">Todavía no hay niños en esta clase.</p>}
                                             {roster.map(m => {
                                                 const present = service && !!findAttendanceByMemberAndService(m.id, service.id)
                                                 return (
                                                     <div key={m.id} className="flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl bg-gray-50">
                                                         <span className="text-sm font-medium text-[#111111]">{m.full_name}</span>
-                                                        <button onClick={() => toggleAttendance(m)} disabled={!service?.is_active}
+                                                        <button onClick={() => toggleAttendance(m)} disabled={!service?.is_active || closed}
                                                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${present ? 'bg-[#13CD68] text-white' : 'bg-white border border-gray-200 text-[#6E6E6E]'}`}>
                                                             <Check className="w-3.5 h-3.5" /> {present ? 'Presente' : 'Marcar'}
                                                         </button>
@@ -230,7 +264,7 @@ export default function BuenaTierraPage() {
                                                 )
                                             })}
 
-                                            {newChild.classId === classId ? (
+                                            {closed ? null : newChild.classId === classId ? (
                                                 <div className="p-4 rounded-xl bg-[#E1F9EC] space-y-2">
                                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                                         <input type="text" placeholder="Nombre" value={newChild.name}

@@ -129,10 +129,19 @@ export function AuthProvider({ children }) {
 
     // Firebase no avisa solo cuando alguien confirma el correo en otra
     // pestaña — hay que recargar el usuario y volver a leer emailVerified.
+    // Antes, si reload() fallaba (p. ej. sesión vencida) el error se tragaba
+    // en silencio y el botón "Ya lo confirmé" no daba ninguna señal de que
+    // algo había salido mal ni de que seguía sin estar verificado.
     const refreshEmailVerified = useCallback(async () => {
-        if (!auth.currentUser) return
-        await auth.currentUser.reload().catch(() => {})
-        setEmailVerified(auth.currentUser.emailVerified)
+        if (!auth.currentUser) return { error: 'No hay sesión activa' }
+        try {
+            await auth.currentUser.reload()
+            const verified = auth.currentUser.emailVerified
+            setEmailVerified(verified)
+            return { data: verified }
+        } catch (err) {
+            return { error: AUTH_ERROR_MESSAGES[err.code] || 'No se pudo comprobar el estado de tu correo. Intenta de nuevo.' }
+        }
     }, [])
 
     const setAccountPassword = useCallback(async (password) => {

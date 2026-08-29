@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { getPrayerRequests, createPrayerRequest, markPrayerAnswered, getActiveService, getGratitudeForPrayer, addProfileNote } from '../../data/mockData.js'
+import { getPrayerRequests, createPrayerRequest, markPrayerAnswered, getActiveService, getGratitudeForPrayer, addProfileNote, createMember } from '../../data/mockData.js'
 import Modal from '../../components/ui/Modal.jsx'
 import MemberAutocomplete from '../../components/shared/MemberAutocomplete.jsx'
 import {
@@ -17,6 +17,7 @@ export default function PrayerRequestsPage() {
     const [content, setContent] = useState('')
     const [nameInput, setNameInput] = useState(user?.name || '')
     const [selectedMemberId, setSelectedMemberId] = useState(user?.member_id || null)
+    const [skipMemberLink, setSkipMemberLink] = useState(false)
     const [notification, setNotification] = useState(null)
     const [answeringPrayer, setAnsweringPrayer] = useState(null)
     const [gratitudeText, setGratitudeText] = useState('')
@@ -37,20 +38,35 @@ export default function PrayerRequestsPage() {
 
     const handleSubmit = () => {
         if (!content.trim() || !nameInput.trim()) return
+
+        // Si no se marcó "no vincular", la petición SIEMPRE queda asignada a
+        // un miembro — si el nombre no coincide con nadie existente (persona
+        // nueva), se crea un miembro Visitante en el momento para poder
+        // vincularla igual, en vez de quedar como texto suelto sin dueño.
+        let memberId = selectedMemberId
+        if (!skipMemberLink && !memberId) {
+            const created = createMember({
+                full_name: nameInput.trim(), member_type: 'Visitante',
+                gender: '', phone: '', email: '', groups: [],
+            })
+            memberId = created.id
+        }
+
         createPrayerRequest({
             service_id: activeService?.id || null,
-            member_id: selectedMemberId || null,
+            member_id: skipMemberLink ? null : memberId,
             author_name: nameInput.trim(),
             type: composeType,
             content: content.trim(),
         })
         // Deja registro histórico en la ficha del miembro, si la petición
-        // quedó asociada a uno (autocompletar seleccionado).
-        if (selectedMemberId) {
+        // quedó asociada a uno.
+        if (!skipMemberLink && memberId) {
             const label = composeType === 'oracion' ? 'Petición de oración' : 'Agradecimiento'
-            addProfileNote(selectedMemberId, user?.name || 'Sistema', `${label}: ${content.trim()}`)
+            addProfileNote(memberId, user?.name || 'Sistema', `${label}: ${content.trim()}`)
         }
         setContent('')
+        setSelectedMemberId(null)
         refreshData()
         showNotification(composeType === 'oracion' ? 'Petición de oración enviada' : 'Gratitud compartida')
     }
@@ -125,9 +141,18 @@ export default function PrayerRequestsPage() {
                         onSelectMember={(member) => setSelectedMemberId(member?.id || null)}
                         placeholder="Busca un miembro o escribe un nombre..."
                     />
-                    {selectedMemberId && (
-                        <p className="text-xs text-[#13CD68] mt-1">✓ Se guardará también como nota en su ficha de miembro</p>
+                    {!skipMemberLink && (
+                        <p className="text-xs text-[#13CD68] mt-1">
+                            {selectedMemberId
+                                ? '✓ Se guardará también como nota en su ficha de miembro'
+                                : '✓ Si no existe todavía, se creará un miembro nuevo (Visitante) para vincular la petición'}
+                        </p>
                     )}
+                    <label className="flex items-center gap-2 mt-2 cursor-pointer w-fit">
+                        <input type="checkbox" checked={skipMemberLink} onChange={(e) => setSkipMemberLink(e.target.checked)}
+                            className="w-4 h-4 accent-[#6E6E6E] cursor-pointer" />
+                        <span className="text-xs text-[#6E6E6E]">No vincular a ningún miembro (queda solo como texto)</span>
+                    </label>
                 </div>
                 <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3}
                     placeholder={composeType === 'oracion' ? 'Comparte tu petición de oración...' : 'Comparte algo por lo que estás agradecido...'}
