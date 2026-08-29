@@ -126,12 +126,26 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // ---------- Biblia colaborativa (destacar y comentar) ----------
+    match /bibleHighlights/{docId} {
+      allow read: if isMiembro();
+      allow create: if isMiembro() && request.resource.data.author_uid == request.auth.uid;
+      allow delete: if isMiembro() && (resource.data.author_uid == request.auth.uid || hasRole('admin'));
+      allow update: if false;
+    }
+    match /bibleComments/{docId} {
+      allow read: if isMiembro();
+      allow create: if isMiembro() && request.resource.data.author_uid == request.auth.uid;
+      allow delete: if isMiembro() && (resource.data.author_uid == request.auth.uid || hasRole('admin'));
+      allow update: if false;
+    }
+
     // ---------- Resto de colecciones ----------
     // memberProfiles, services, foro, anuncios, etc.: cualquier miembro
     // aprobado (no cualquier cuenta de Google autenticada).
     match /{collection}/{docId} {
       allow read, write: if isMiembro()
-        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages']);
+        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments']);
     }
   }
 }

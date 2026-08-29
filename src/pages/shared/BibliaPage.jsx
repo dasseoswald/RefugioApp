@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { BookOpen, Search, ChevronLeft, ChevronRight, X, Loader2 } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext.jsx'
+import {
+    subscribeBibleAnnotations, toggleVerseHighlight, addVerseComment, deleteVerseComment,
+} from '../../data/mockData.js'
+import {
+    BookOpen, Search, ChevronLeft, ChevronRight, X, Loader2,
+    Highlighter, MessageSquare, Share2, Trash2, Send, Check,
+} from 'lucide-react'
 
 const TRANSLATIONS = [
     { code: 'NTV', label: 'NTV — Nueva Traducción Viviente' },
@@ -36,6 +43,8 @@ function highlightMatch(text, term) {
 }
 
 export default function BibliaPage() {
+    const { user } = useAuth()
+    const isAdmin = user?.role === 'admin'
     const [translation, setTranslation] = useState('NTV')
     const [books, setBooks] = useState([])
     const [bookId, setBookId] = useState(43) // Juan
@@ -48,6 +57,15 @@ export default function BibliaPage() {
     const [searchTerm, setSearchTerm] = useState('')
     const [searchResults, setSearchResults] = useState(null)
     const [searching, setSearching] = useState(false)
+
+    // Destacados y comentarios son colaborativos entre todos los usuarios y
+    // no dependen de la traducción (aplican al versículo, no al texto exacto
+    // de una traducción en particular) — se vuelven a suscribir solo cuando
+    // cambia el libro o el capítulo que se está leyendo.
+    const [annotations, setAnnotations] = useState({ highlights: [], comments: [] })
+    const [openCommentsVerse, setOpenCommentsVerse] = useState(null)
+    const [commentDraft, setCommentDraft] = useState('')
+    const [copiedVerse, setCopiedVerse] = useState(null)
 
     const currentBook = books.find(b => b.bookid === bookId)
     const bookIndex = books.findIndex(b => b.bookid === bookId)
@@ -67,6 +85,47 @@ export default function BibliaPage() {
             .then(data => { setVerses(data); setLoadingVerses(false) })
             .catch(() => { setErrorMsg('No se pudo cargar el capítulo. Intenta de nuevo.'); setLoadingVerses(false) })
     }, [translation, bookId, chapter])
+
+    useEffect(() => {
+        setOpenCommentsVerse(null)
+        const unsubscribe = subscribeBibleAnnotations(bookId, chapter, setAnnotations)
+        return unsubscribe
+    }, [bookId, chapter])
+
+    const highlightsFor = (verseNum) => annotations.highlights.filter(h => h.verse === verseNum)
+    const commentsFor = (verseNum) => annotations.comments.filter(c => c.verse === verseNum)
+
+    const handleToggleHighlight = (verseNum) => {
+        const mine = highlightsFor(verseNum).find(h => h.author_uid === user.auth_uid)
+        toggleVerseHighlight(bookId, chapter, verseNum, { auth_uid: user.auth_uid, name: user.name, alreadyHighlighted: !!mine })
+    }
+
+    const handleAddComment = (verseNum) => {
+        if (!commentDraft.trim()) return
+        addVerseComment(bookId, chapter, verseNum, {
+            content: commentDraft.trim(),
+            author_id: user.id,
+            author_name: user.name,
+            author_photo: user.photo_url,
+            author_uid: user.auth_uid,
+        })
+        setCommentDraft('')
+    }
+
+    const handleShare = async (verseNum, text) => {
+        const shareText = `${currentBook?.name} ${chapter}:${verseNum} (${translation})\n"${text}"`
+        if (navigator.share) {
+            navigator.share({ text: shareText }).catch(() => {})
+            return
+        }
+        try {
+            await navigator.clipboard.writeText(shareText)
+            setCopiedVerse(verseNum)
+            setTimeout(() => setCopiedVerse(null), 2000)
+        } catch {
+            setErrorMsg('No se pudo copiar el versículo.')
+        }
+    }
 
     const goToChapter = useCallback((direction) => {
         if (!currentBook) return
@@ -204,13 +263,70 @@ export default function BibliaPage() {
                         {loadingVerses ? (
                             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 text-[#2696D2] animate-spin" /></div>
                         ) : (
-                            <div className="space-y-3">
-                                {verses.map(v => (
-                                    <p key={v.pk} className="text-[#111111] leading-relaxed whitespace-pre-line">
-                                        <span className="text-xs font-bold text-[#2696D2] align-super mr-1">{v.verse}</span>
-                                        {stripHtml(v.text)}
-                                    </p>
-                                ))}
+                            <div className="space-y-1">
+                                {verses.map(v => {
+                                    const text = stripHtml(v.text)
+                                    const verseHighlights = highlightsFor(v.verse)
+                                    const verseComments = commentsFor(v.verse)
+                                    const isMineHighlighted = verseHighlights.some(h => h.author_uid === user.auth_uid)
+                                    const isOpen = openCommentsVerse === v.verse
+
+                                    return (
+                                        <div key={v.pk} className="group rounded-lg -mx-2 px-2 py-1.5">
+                                            <p className={`text-[#111111] leading-relaxed whitespace-pre-line rounded px-1 -mx-1 ${verseHighlights.length > 0 ? 'bg-[#FFF3CD]' : ''}`}>
+                                                <span className="text-xs font-bold text-[#2696D2] align-super mr-1">{v.verse}</span>
+                                                {text}
+                                            </p>
+
+                                            <div className="flex items-center gap-4 mt-1 h-5 text-xs opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                                                <button onClick={() => handleToggleHighlight(v.verse)}
+                                                    className={`flex items-center gap-1 cursor-pointer font-medium ${isMineHighlighted ? 'text-[#B8860B]' : 'text-[#6E6E6E] hover:text-[#111111]'}`}>
+                                                    <Highlighter className="w-3.5 h-3.5" />
+                                                    {verseHighlights.length > 0 ? `Destacado (${verseHighlights.length})` : 'Destacar'}
+                                                </button>
+                                                <button onClick={() => setOpenCommentsVerse(isOpen ? null : v.verse)}
+                                                    className={`flex items-center gap-1 cursor-pointer font-medium ${isOpen ? 'text-[#2696D2]' : 'text-[#6E6E6E] hover:text-[#111111]'}`}>
+                                                    <MessageSquare className="w-3.5 h-3.5" />
+                                                    {verseComments.length > 0 ? `Comentarios (${verseComments.length})` : 'Comentar'}
+                                                </button>
+                                                <button onClick={() => handleShare(v.verse, text)} className="flex items-center gap-1 cursor-pointer font-medium text-[#6E6E6E] hover:text-[#111111]">
+                                                    {copiedVerse === v.verse ? <Check className="w-3.5 h-3.5 text-[#13CD68]" /> : <Share2 className="w-3.5 h-3.5" />}
+                                                    {copiedVerse === v.verse ? 'Copiado' : 'Compartir'}
+                                                </button>
+                                            </div>
+
+                                            {isOpen && (
+                                                <div className="mt-2 mb-1 p-3 bg-gray-50 rounded-xl space-y-2.5">
+                                                    {verseComments.length === 0 ? (
+                                                        <p className="text-xs text-[#6E6E6E]">Todavía no hay comentarios en este versículo.</p>
+                                                    ) : (
+                                                        verseComments.map(c => (
+                                                            <div key={c.id} className="flex items-start justify-between gap-2 text-sm">
+                                                                <p className="text-[#111111]"><span className="font-semibold">{c.author_name}: </span>{c.content}</p>
+                                                                {(c.author_uid === user.auth_uid || isAdmin) && (
+                                                                    <button onClick={() => deleteVerseComment(c.id)} title="Borrar comentario"
+                                                                        className="text-[#6E6E6E] hover:text-[#E74C3C] cursor-pointer flex-shrink-0">
+                                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                    <div className="flex items-center gap-2 pt-1">
+                                                        <input type="text" value={commentDraft} onChange={(e) => setCommentDraft(e.target.value)}
+                                                            onKeyDown={(e) => e.key === 'Enter' && handleAddComment(v.verse)}
+                                                            placeholder="Escribe un comentario..."
+                                                            className="flex-1 px-3 py-2 rounded-lg border-2 border-gray-100 bg-white text-sm focus:outline-none focus:border-[#2696D2]" />
+                                                        <button onClick={() => handleAddComment(v.verse)} disabled={!commentDraft.trim()}
+                                                            className="p-2 rounded-lg text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer" style={{ background: '#2696D2' }}>
+                                                            <Send className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                })}
                             </div>
                         )}
                     </div>

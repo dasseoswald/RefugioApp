@@ -5,7 +5,7 @@
  * memoria + localStorage por ahora, pendiente de migración.
  */
 import { db } from '../firebase.js'
-import { collection, doc, setDoc, updateDoc, deleteDoc, getDocs, onSnapshot, writeBatch, arrayUnion, query, orderBy, limit } from 'firebase/firestore'
+import { collection, doc, setDoc, updateDoc, deleteDoc, getDocs, onSnapshot, writeBatch, arrayUnion, query, where, orderBy, limit } from 'firebase/firestore'
 
 // Ubicación de la iglesia (Un Refugio para la Familia, Coelemu) para el
 // registro automático de asistencia por GPS. El radio incluye margen para
@@ -603,6 +603,73 @@ export const listenToRadioMessages = radioChat.listen
 export const deleteRadioMessage = radioChat.delete
 export const clearRadioMessages = radioChat.clearAll
 export const sendRadioMessage = radioChat.send
+
+// ---- Biblia colaborativa (destacar y comentar versículos) ----
+// Se consulta solo el capítulo que se está leyendo (no toda la Biblia de una
+// vez) para que esto siga siendo liviano sin importar cuánto crezca el uso.
+// El destacado es independiente de la traducción (aplica al versículo en sí,
+// no al texto exacto de una traducción), por eso la clave es libro+capítulo+
+// versículo. El id del destacado es determinístico (libro-capítulo-versículo-
+// uid) para poder alternarlo (crear/borrar) sin tener que buscarlo antes.
+export function subscribeBibleAnnotations(bookId, chapter, callback) {
+    let highlights = []
+    let comments = []
+    const emit = () => callback({ highlights, comments })
+
+    const highlightsQuery = query(collection(db, 'bibleHighlights'),
+        where('book_id', '==', bookId), where('chapter', '==', chapter))
+    const unsubHighlights = onSnapshot(highlightsQuery, (snap) => {
+        highlights = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        emit()
+    }, (err) => console.error('Error sincronizando los destacados', err))
+
+    const commentsQuery = query(collection(db, 'bibleComments'),
+        where('book_id', '==', bookId), where('chapter', '==', chapter), orderBy('created_at', 'asc'))
+    const unsubComments = onSnapshot(commentsQuery, (snap) => {
+        comments = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        emit()
+    }, (err) => console.error('Error sincronizando los comentarios', err))
+
+    return () => { unsubHighlights(); unsubComments() }
+}
+
+// Si el usuario ya había destacado este versículo, lo quita; si no, lo agrega.
+export function toggleVerseHighlight(bookId, chapter, verse, author) {
+    const id = `${bookId}-${chapter}-${verse}-${author.auth_uid}`
+    const ref = doc(db, 'bibleHighlights', id)
+    if (author.alreadyHighlighted) {
+        return deleteDoc(ref).catch(err => console.error('No se pudo quitar el destacado', err))
+    }
+    return setDoc(ref, {
+        book_id: bookId,
+        chapter,
+        verse,
+        author_uid: author.auth_uid,
+        author_name: author.name,
+        created_at: new Date().toISOString(),
+    }).catch(err => console.error('No se pudo destacar el versículo', err))
+}
+
+export function addVerseComment(bookId, chapter, verse, { content, author_id, author_name, author_photo, author_uid }) {
+    const ref = doc(collection(db, 'bibleComments'))
+    return setDoc(ref, {
+        book_id: bookId,
+        chapter,
+        verse,
+        content,
+        author_id,
+        author_name,
+        author_photo: author_photo || null,
+        author_uid,
+        created_at: new Date().toISOString(),
+    }).catch(err => console.error('No se pudo publicar el comentario', err))
+}
+
+// El dueño del comentario o un administrador pueden borrarlo (ver regla de
+// seguridad de bibleComments en firestore.rules).
+export function deleteVerseComment(id) {
+    return deleteDoc(doc(db, 'bibleComments', id)).catch(err => console.error('No se pudo borrar el comentario', err))
+}
 
 // ---- Foro abierto (preguntas de la congregación, anónimas o no) ----
 // Igual que los chats en vivo, se sincroniza directo con Firestore para que
