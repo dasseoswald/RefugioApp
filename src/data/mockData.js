@@ -634,20 +634,24 @@ export function subscribeBibleAnnotations(bookId, chapter, callback) {
 }
 
 // Si el usuario ya había destacado este versículo, lo quita; si no, lo agrega.
-export function toggleVerseHighlight(bookId, chapter, verse, author) {
-    const id = `${bookId}-${chapter}-${verse}-${author.auth_uid}`
+// color: uno de los ids de HIGHLIGHT_COLORS (ver BibliaPage.jsx). Si ya
+// tenía destacado este versículo con ese MISMO color, lo quita (permite
+// destacar/quitar); si lo tenía con otro color, solo cambia el color.
+export function setVerseHighlight(bookId, chapter, verse, { auth_uid, name, color, currentColor }) {
+    const id = `${bookId}-${chapter}-${verse}-${auth_uid}`
     const ref = doc(db, 'bibleHighlights', id)
-    if (author.alreadyHighlighted) {
+    if (currentColor === color) {
         return deleteDoc(ref).catch(err => console.error('No se pudo quitar el destacado', err))
     }
     return setDoc(ref, {
         book_id: bookId,
         chapter,
         verse,
-        author_uid: author.auth_uid,
-        author_name: author.name,
+        color,
+        author_uid: auth_uid,
+        author_name: name,
         created_at: new Date().toISOString(),
-    }).catch(err => console.error('No se pudo destacar el versículo', err))
+    }, { merge: true }).catch(err => console.error('No se pudo destacar el versículo', err))
 }
 
 export function addVerseComment(bookId, chapter, verse, { content, author_id, author_name, author_photo, author_uid }) {

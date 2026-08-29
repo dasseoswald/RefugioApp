@@ -1,12 +1,23 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import {
-    subscribeBibleAnnotations, toggleVerseHighlight, addVerseComment, deleteVerseComment,
+    subscribeBibleAnnotations, setVerseHighlight, addVerseComment, deleteVerseComment,
 } from '../../data/mockData.js'
 import {
     BookOpen, Search, ChevronLeft, ChevronRight, X, Loader2,
     Highlighter, MessageSquare, Share2, Trash2, Send, Check,
 } from 'lucide-react'
+
+// Paleta de colores para destacar versículos (cada persona elige el suyo).
+const HIGHLIGHT_COLORS = [
+    { id: 'yellow', bg: '#FFF3CD', swatch: '#F5C518' },
+    { id: 'green', bg: '#D9F7E3', swatch: '#13CD68' },
+    { id: 'blue', bg: '#DCEEFB', swatch: '#2696D2' },
+    { id: 'pink', bg: '#FBE1EE', swatch: '#E85D9C' },
+    { id: 'orange', bg: '#FDE6D0', swatch: '#E8A838' },
+]
+const DEFAULT_HIGHLIGHT_COLOR = HIGHLIGHT_COLORS[0]
+const colorInfo = (id) => HIGHLIGHT_COLORS.find(c => c.id === id) || DEFAULT_HIGHLIGHT_COLOR
 
 const TRANSLATIONS = [
     { code: 'NTV', label: 'NTV — Nueva Traducción Viviente' },
@@ -64,6 +75,7 @@ export default function BibliaPage() {
     // cambia el libro o el capítulo que se está leyendo.
     const [annotations, setAnnotations] = useState({ highlights: [], comments: [] })
     const [openCommentsVerse, setOpenCommentsVerse] = useState(null)
+    const [colorPickerVerse, setColorPickerVerse] = useState(null)
     const [commentDraft, setCommentDraft] = useState('')
     const [copiedVerse, setCopiedVerse] = useState(null)
 
@@ -88,6 +100,7 @@ export default function BibliaPage() {
 
     useEffect(() => {
         setOpenCommentsVerse(null)
+        setColorPickerVerse(null)
         const unsubscribe = subscribeBibleAnnotations(bookId, chapter, setAnnotations)
         return unsubscribe
     }, [bookId, chapter])
@@ -95,9 +108,10 @@ export default function BibliaPage() {
     const highlightsFor = (verseNum) => annotations.highlights.filter(h => h.verse === verseNum)
     const commentsFor = (verseNum) => annotations.comments.filter(c => c.verse === verseNum)
 
-    const handleToggleHighlight = (verseNum) => {
+    const handleSetHighlight = (verseNum, color) => {
         const mine = highlightsFor(verseNum).find(h => h.author_uid === user.auth_uid)
-        toggleVerseHighlight(bookId, chapter, verseNum, { auth_uid: user.auth_uid, name: user.name, alreadyHighlighted: !!mine })
+        setVerseHighlight(bookId, chapter, verseNum, { auth_uid: user.auth_uid, name: user.name, color, currentColor: mine?.color })
+        setColorPickerVerse(null)
     }
 
     const handleAddComment = (verseNum) => {
@@ -268,19 +282,26 @@ export default function BibliaPage() {
                                     const text = stripHtml(v.text)
                                     const verseHighlights = highlightsFor(v.verse)
                                     const verseComments = commentsFor(v.verse)
-                                    const isMineHighlighted = verseHighlights.some(h => h.author_uid === user.auth_uid)
+                                    const mineHighlight = verseHighlights.find(h => h.author_uid === user.auth_uid)
+                                    // Se ve el color propio si uno destacó; si no, el de la
+                                    // destacada más reciente de otra persona (para que igual
+                                    // se note que alguien de la comunidad lo marcó).
+                                    const displayHighlight = mineHighlight || verseHighlights[verseHighlights.length - 1]
                                     const isOpen = openCommentsVerse === v.verse
+                                    const isPickingColor = colorPickerVerse === v.verse
 
                                     return (
-                                        <div key={v.pk} className="group rounded-lg -mx-2 px-2 py-1.5">
-                                            <p className={`text-[#111111] leading-relaxed whitespace-pre-line rounded px-1 -mx-1 ${verseHighlights.length > 0 ? 'bg-[#FFF3CD]' : ''}`}>
+                                        <div key={v.pk} className="rounded-lg -mx-2 px-2 py-1.5">
+                                            <p className="text-[#111111] leading-relaxed whitespace-pre-line rounded px-1 -mx-1"
+                                                style={displayHighlight ? { background: colorInfo(displayHighlight.color).bg } : {}}>
                                                 <span className="text-xs font-bold text-[#2696D2] align-super mr-1">{v.verse}</span>
                                                 {text}
                                             </p>
 
-                                            <div className="flex items-center gap-4 mt-1 h-5 text-xs opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                                                <button onClick={() => handleToggleHighlight(v.verse)}
-                                                    className={`flex items-center gap-1 cursor-pointer font-medium ${isMineHighlighted ? 'text-[#B8860B]' : 'text-[#6E6E6E] hover:text-[#111111]'}`}>
+                                            <div className="relative flex items-center gap-4 mt-1 flex-wrap text-xs">
+                                                <button onClick={() => setColorPickerVerse(isPickingColor ? null : v.verse)}
+                                                    className={`flex items-center gap-1 cursor-pointer font-medium ${mineHighlight ? '' : 'text-[#6E6E6E] hover:text-[#111111]'}`}
+                                                    style={mineHighlight ? { color: colorInfo(mineHighlight.color).swatch } : {}}>
                                                     <Highlighter className="w-3.5 h-3.5" />
                                                     {verseHighlights.length > 0 ? `Destacado (${verseHighlights.length})` : 'Destacar'}
                                                 </button>
@@ -293,6 +314,24 @@ export default function BibliaPage() {
                                                     {copiedVerse === v.verse ? <Check className="w-3.5 h-3.5 text-[#13CD68]" /> : <Share2 className="w-3.5 h-3.5" />}
                                                     {copiedVerse === v.verse ? 'Copiado' : 'Compartir'}
                                                 </button>
+
+                                                {isPickingColor && (
+                                                    <div className="absolute top-6 left-0 z-10 flex items-center gap-2 p-2 bg-white rounded-xl border border-gray-100 shadow-lg">
+                                                        {HIGHLIGHT_COLORS.map(c => (
+                                                            <button key={c.id} onClick={() => handleSetHighlight(v.verse, c.id)} title={c.id}
+                                                                className="w-6 h-6 rounded-full cursor-pointer flex items-center justify-center border-2 transition-transform hover:scale-110"
+                                                                style={{ background: c.swatch, borderColor: mineHighlight?.color === c.id ? '#111111' : 'transparent' }}>
+                                                                {mineHighlight?.color === c.id && <Check className="w-3.5 h-3.5 text-white" />}
+                                                            </button>
+                                                        ))}
+                                                        {mineHighlight && (
+                                                            <button onClick={() => handleSetHighlight(v.verse, mineHighlight.color)} title="Quitar destacado"
+                                                                className="w-6 h-6 rounded-full cursor-pointer flex items-center justify-center border-2 border-gray-200 text-[#6E6E6E] hover:text-[#E74C3C] hover:border-[#E74C3C]">
+                                                                <X className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
 
                                             {isOpen && (

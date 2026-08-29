@@ -130,8 +130,11 @@ service cloud.firestore {
     match /bibleHighlights/{docId} {
       allow read: if isMiembro();
       allow create: if isMiembro() && request.resource.data.author_uid == request.auth.uid;
+      // Cambiar de color es una actualización (setDoc con merge sobre un
+      // destacado que ya existía) — solo el propio dueño puede hacerlo.
+      allow update: if isMiembro() && resource.data.author_uid == request.auth.uid
+        && request.resource.data.author_uid == request.auth.uid;
       allow delete: if isMiembro() && (resource.data.author_uid == request.auth.uid || hasRole('admin'));
-      allow update: if false;
     }
     match /bibleComments/{docId} {
       allow read: if isMiembro();
