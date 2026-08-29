@@ -326,6 +326,9 @@ export default function EscuelaDiscipuloPage() {
                                                             {levelMembers.length === 0 && (
                                                                 <p className="text-sm text-[#6E6E6E] text-center py-4">No hay alumnos inscritos en {levelConf.name}</p>
                                                             )}
+                                                            <div className="mt-4">
+                                                                <OfferingLog scopeKey={`escuela:${cls.id}`} canManage={true} color={levelConf.color} />
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>
@@ -338,8 +341,6 @@ export default function EscuelaDiscipuloPage() {
                     })
                 )}
             </div>
-
-            <OfferingLog scopeKey={`escuela:${activeLevel}`} canManage={true} color={levelConf.color} />
 
             {/* Enrolled members */}
             <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] overflow-hidden">
