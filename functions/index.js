@@ -10,7 +10,7 @@ initializeApp()
 const db = getFirestore()
 
 // Roles válidos de la app (deben coincidir con los usados en src/).
-const VALID_ROLES = ['admin', 'controller', 'tesorero', 'attendee']
+const VALID_ROLES = ['admin', 'controller', 'tesorero', 'attendee', 'bienvenida']
 
 // ---- Roles (RA-01/RA-02 del informe de seguridad) ----
 // La colección "users" está indexada por un id interno de la app, no por el
@@ -79,6 +79,11 @@ const SERVICE_TIMEZONE = 'America/Santiago'
 const SERVICE_TYPES = {
     sunday: { weekday: 0, defaultName: 'Servicio Dominical', starts_at: '07:00', ends_at: '13:00' },
     thursday: { weekday: 4, defaultName: 'Servicio de Jueves', starts_at: '20:00', ends_at: '22:00' },
+    // Asistencia propia de las clases de niños (Paz/Alegría/Faith), en
+    // paralelo al culto dominical — activar uno no afecta al otro porque
+    // activateUpcomingServices/toggleServiceActive solo desactivan servicios
+    // del MISMO service_type.
+    'buena-tierra': { weekday: 0, defaultName: 'Buena Tierra', starts_at: '07:00', ends_at: '13:00' },
 }
 
 function formatDateParts(y, m, d) {
@@ -162,6 +167,38 @@ function chunk(arr, size) {
     return chunks
 }
 
+// Envía la notificación push a una lista de tokens y limpia los que ya no
+// sirven (dispositivo desinstaló la app, etc.) — usado tanto por los avisos
+// manuales (onGroupNoticeCreated) como por el aviso automático a Bienvenida
+// (onAttendanceCreated) para no duplicar esta lógica dos veces.
+async function sendPushToTokens(tokens, title, body, logPrefix) {
+    if (tokens.length === 0) return
+    const response = await getMessaging().sendEachForMulticast({
+        tokens,
+        notification: { title: title.slice(0, 80), body: body.slice(0, 240) },
+    })
+    console.log(`${logPrefix}: enviados=${response.successCount} fallidos=${response.failureCount}`)
+    response.responses.forEach((r, i) => {
+        if (!r.success) console.log(`${logPrefix}: fallo token[${i}] code=${r.error?.code} msg=${r.error?.message}`)
+    })
+
+    const invalidTokens = []
+    response.responses.forEach((r, i) => {
+        if (!r.success && ['messaging/invalid-registration-token', 'messaging/registration-token-not-registered'].includes(r.error?.code)) {
+            invalidTokens.push(tokens[i])
+        }
+    })
+    if (invalidTokens.length > 0) {
+        const { FieldValue } = require('firebase-admin/firestore')
+        const usersWithTokensSnap = await db.collection('users').where('fcm_tokens', 'array-contains-any', invalidTokens.slice(0, 10)).get()
+        const batch = db.batch()
+        usersWithTokensSnap.forEach(doc => {
+            batch.update(doc.ref, { fcm_tokens: FieldValue.arrayRemove(...invalidTokens) })
+        })
+        await batch.commit().catch(() => {})
+    }
+}
+
 // Roles con permiso para emitir avisos (que disparan notificaciones push a
 // nombre de la institución). Debe coincidir con la restricción de creación
 // en firestore.rules — esta revalidación es la segunda capa (RA-03): las
@@ -212,35 +249,39 @@ exports.onGroupNoticeCreated = onDocumentCreated('groupNotices/{noticeId}', asyn
         }
     }
     console.log(`onGroupNoticeCreated: tokens encontrados=${tokens.length}`)
-    if (tokens.length === 0) return
+    // Truncados para limitar el abuso del espacio de mensaje (RA-03), ya
+    // aplicado también dentro de sendPushToTokens.
+    await sendPushToTokens(tokens, String(notice.title || 'Nuevo aviso'), String(notice.content || ''), 'onGroupNoticeCreated')
+})
 
-    // Truncados para limitar el abuso del espacio de mensaje (RA-03).
-    const title = String(notice.title || 'Nuevo aviso').slice(0, 80)
-    const body = String(notice.content || '').slice(0, 240)
+// ---- Notificación automática a Bienvenida (4ª asistencia de un visitante) ----
+// Se dispara con CUALQUIER asistencia (Buena Tierra, domingo o jueves — todas
+// viven en la misma colección "attendances"), así que cubre niños y adultos
+// por igual sin lógica separada por tipo de servicio.
+exports.onAttendanceCreated = onDocumentCreated('attendances/{attendanceId}', async (event) => {
+    const attendance = event.data?.data()
+    if (!attendance?.member_id) return
 
-    const response = await getMessaging().sendEachForMulticast({
-        tokens,
-        notification: { title, body },
-    })
-    console.log(`onGroupNoticeCreated: enviados=${response.successCount} fallidos=${response.failureCount}`)
-    response.responses.forEach((r, i) => {
-        if (!r.success) console.log(`onGroupNoticeCreated: fallo token[${i}] code=${r.error?.code} msg=${r.error?.message}`)
-    })
+    const memberSnap = await db.collection('members').doc(attendance.member_id).get()
+    if (!memberSnap.exists || memberSnap.data().member_type !== 'Visitante') return
 
-    // Limpieza de tokens inválidos/expirados (dispositivo desinstaló la app, etc.)
-    const invalidTokens = []
-    response.responses.forEach((r, i) => {
-        if (!r.success && ['messaging/invalid-registration-token', 'messaging/registration-token-not-registered'].includes(r.error?.code)) {
-            invalidTokens.push(tokens[i])
-        }
-    })
-    if (invalidTokens.length > 0) {
-        const { FieldValue } = require('firebase-admin/firestore')
-        const usersWithTokensSnap = await db.collection('users').where('fcm_tokens', 'array-contains-any', invalidTokens.slice(0, 10)).get()
-        const batch = db.batch()
-        usersWithTokensSnap.forEach(doc => {
-            batch.update(doc.ref, { fcm_tokens: FieldValue.arrayRemove(...invalidTokens) })
-        })
-        await batch.commit().catch(() => {})
+    const attendancesSnap = await db.collection('attendances').where('member_id', '==', attendance.member_id).get()
+    const totalAttendances = attendancesSnap.size
+    console.log(`onAttendanceCreated: member_id=${attendance.member_id} totalAttendances=${totalAttendances}`)
+    if (totalAttendances !== 4) return
+
+    const bienvenidaRolesSnap = await db.collection('userRoles').where('role', '==', 'bienvenida').get()
+    if (bienvenidaRolesSnap.empty) {
+        console.log('onAttendanceCreated: nadie con rol bienvenida todavía')
+        return
     }
+
+    const tokens = []
+    for (const uidsChunk of chunk(bienvenidaRolesSnap.docs.map(d => d.id), 10)) {
+        const usersSnap = await db.collection('users').where('auth_uid', 'in', uidsChunk).get()
+        usersSnap.forEach(doc => tokens.push(...(doc.data().fcm_tokens || [])))
+    }
+
+    const memberName = memberSnap.data().full_name || 'Un visitante'
+    await sendPushToTokens(tokens, '¡Cuarta visita! 🎉', `${memberName} ya lleva 4 asistencias. Es momento de darle una bienvenida especial.`, 'onAttendanceCreated')
 })

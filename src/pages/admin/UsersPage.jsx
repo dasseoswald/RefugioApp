@@ -45,6 +45,7 @@ export default function UsersPage() {
         controller: { label: 'Controlador', color: '#13CD68', bg: '#E1F9EC' },
         attendee: { label: 'Asistente', color: '#E8A838', bg: '#FFF3CD' },
         tesorero: { label: 'Tesorero', color: '#9B59B6', bg: '#F3E8FB' },
+        bienvenida: { label: 'Bienvenida', color: '#E85D9C', bg: '#FBE1EE' },
     }
 
     const showNotification = (message, type = 'success') => {
@@ -219,6 +220,7 @@ export default function UsersPage() {
                                         <option value="attendee">Asistente</option>
                                         <option value="controller">Controlador</option>
                                         <option value="tesorero">Tesorero</option>
+                                        <option value="bienvenida">Bienvenida</option>
                                         <option value="admin">Administrador</option>
                                     </select>
                                 )}
@@ -247,28 +249,31 @@ export default function UsersPage() {
                                 <th className="text-center px-4 py-2 font-medium" style={{ color: '#13CD68' }}>Controlador</th>
                                 <th className="text-center px-4 py-2 font-medium" style={{ color: '#2696D2' }}>Admin</th>
                                 <th className="text-center px-4 py-2 font-medium" style={{ color: '#9B59B6' }}>Tesorero</th>
+                                <th className="text-center px-4 py-2 font-medium" style={{ color: '#E85D9C' }}>Bienvenida</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white">
                             {[
-                                ['Registrar propia asistencia', true, true, true, true],
-                                ['Registrar asistencia de terceros', false, true, true, false],
-                                ['Gestión de miembros', false, true, true, false],
-                                ['Ver reportes', false, true, true, false],
-                                ['Exportar PDF/Excel', false, true, true, false],
-                                ['Gestionar servicios', false, false, true, false],
-                                ['Gestionar usuarios', false, false, true, false],
-                                ['Crear otro Administrador', false, false, true, false],
-                                ['Enviar mensajes a todos los grupos', false, false, true, false],
-                                ['Configurar sistema', false, false, true, false],
-                                ['Ver ofrendas y diezmos (confidencial)', false, false, false, true],
-                            ].map(([perm, att, ctrl, admin, tesorero]) => (
+                                ['Registrar propia asistencia', true, true, true, true, true],
+                                ['Registrar asistencia de terceros', false, true, true, false, false],
+                                ['Gestión de miembros', false, true, true, false, false],
+                                ['Ver reportes', false, true, true, false, false],
+                                ['Exportar PDF/Excel', false, true, true, false, false],
+                                ['Gestionar servicios', false, false, true, false, false],
+                                ['Gestionar usuarios', false, false, true, false, false],
+                                ['Crear otro Administrador', false, false, true, false, false],
+                                ['Enviar mensajes a todos los grupos', false, false, true, false, false],
+                                ['Configurar sistema', false, false, true, false, false],
+                                ['Ver ofrendas y diezmos (confidencial)', false, false, false, true, false],
+                                ['Ver panel de Nuevos y notificación a la 4ª visita', false, false, true, false, true],
+                            ].map(([perm, att, ctrl, admin, tesorero, bienvenida]) => (
                                 <tr key={perm} className="hover:bg-white/60 transition-colors">
                                     <td className="px-4 py-2.5 text-[#111111] font-medium">{perm}</td>
                                     <td className="text-center px-4 py-2.5">{att ? '✅' : '❌'}</td>
                                     <td className="text-center px-4 py-2.5">{ctrl ? '✅' : '❌'}</td>
                                     <td className="text-center px-4 py-2.5">{admin ? '✅' : '❌'}</td>
                                     <td className="text-center px-4 py-2.5">{tesorero ? '✅' : '❌'}</td>
+                                    <td className="text-center px-4 py-2.5">{bienvenida ? '✅' : '❌'}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -308,6 +313,7 @@ export default function UsersPage() {
                             <option value="attendee">Asistente</option>
                             <option value="controller">Controlador</option>
                             <option value="tesorero">Tesorero</option>
+                            <option value="bienvenida">Bienvenida</option>
                             <option value="admin">Administrador</option>
                         </select>
                     </div>

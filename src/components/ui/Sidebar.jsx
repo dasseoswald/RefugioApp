@@ -32,6 +32,7 @@ const NAV_CONFIG = {
         { to: '/admin/reports', icon: BarChart3, label: 'Reportes' },
         { to: '/admin/users', icon: Shield, label: 'Usuarios' },
         { to: '/admin/mensajes', icon: Megaphone, label: 'Mensajes' },
+        { to: '/admin/nuevos', icon: UserCheck, label: 'Nuevos' },
         { to: '/admin/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
         { to: '/presentacion', icon: Projector, label: 'Presentación' },
         { to: '/admin/eventos', icon: PartyPopper, label: 'Eventos' },
@@ -71,6 +72,15 @@ const NAV_CONFIG = {
         { to: '/tesorero/biblia', icon: BookOpen, label: 'Biblia' },
         { to: '/tesorero/radio', icon: Radio, label: 'Radio Refugio' },
     ],
+    bienvenida: [
+        { to: '/bienvenida', icon: UserCheck, label: 'Nuevos', end: true },
+        { to: '/bienvenida/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
+        { to: '/bienvenida/eventos', icon: PartyPopper, label: 'Eventos' },
+        { to: '/bienvenida/chat', icon: MessageCircle, label: 'Chat en Vivo' },
+        { to: '/bienvenida/foro', icon: MessageCircleQuestion, label: 'Foro' },
+        { to: '/bienvenida/biblia', icon: BookOpen, label: 'Biblia' },
+        { to: '/bienvenida/radio', icon: Radio, label: 'Radio Refugio' },
+    ],
 }
 
 const PROFILE_ROUTES = {
@@ -78,6 +88,7 @@ const PROFILE_ROUTES = {
     controller: '/controller/profile',
     attendee: '/attendee/profile',
     tesorero: '/tesorero/profile',
+    bienvenida: '/bienvenida/profile',
 }
 
 export default function Sidebar() {
@@ -110,7 +121,7 @@ export default function Sidebar() {
         navigate('/login')
     }
 
-    const roleLabels = { admin: 'Administrador', controller: 'Controlador', attendee: 'Asistente', tesorero: 'Tesorero' }
+    const roleLabels = { admin: 'Administrador', controller: 'Controlador', attendee: 'Asistente', tesorero: 'Tesorero', bienvenida: 'Bienvenida' }
 
     return (
         <>

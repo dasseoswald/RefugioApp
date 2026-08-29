@@ -473,6 +473,56 @@ export function getVisitorsDueWelcomeThisWeek() {
         .sort((a, b) => new Date(b.achievedAt) - new Date(a.achievedAt))
 }
 
+// Igual que getVisitorsDueWelcomeThisWeek pero sin filtrar por "esta
+// semana": agrupa a TODOS los visitantes vigentes por cuántos checks de
+// bienvenida llevan (1 a 4), con su última asistencia — para el panel del
+// rol Bienvenida ("Nuevos"). Cuenta asistencias de cualquier servicio
+// (Buena Tierra, domingo, jueves), así que cubre niños y adultos por igual.
+export function getVisitorsByCheckCount() {
+    const buckets = { 1: [], 2: [], 3: [], 4: [] }
+    MEMBERS
+        .filter(m => m.member_type === 'Visitante')
+        .forEach(member => {
+            const attendances = getAttendancesByMember(member.id)
+                .slice()
+                .sort((a, b) => new Date(a.check_in_time) - new Date(b.check_in_time))
+            if (attendances.length === 0) return
+            const checks = Math.min(attendances.length, WELCOME_CHECK_ACTIONS.length)
+            const lastAttendance = attendances[attendances.length - 1].check_in_time
+            buckets[checks].push({ member, checks, lastAttendance })
+        })
+    Object.values(buckets).forEach(list => list.sort((a, b) => new Date(b.lastAttendance) - new Date(a.lastAttendance)))
+    return buckets
+}
+
+// ---- Buena Tierra: clases por edad, líder y maestros/ayudantes ----
+// Las 3 clases (paz/alegria/faith) son documentos fijos, sembrados una sola
+// vez — ver seedBuenaTierraClasses más abajo. El rango de edad lo puede
+// editar el propio maestro; asignar maestros/ayudantes queda para el admin
+// o quien esté marcado como líder en buenaTierraSettings/main (ver
+// firestore.rules: isBuenaTierraLeader/isBuenaTierraTeacherOf).
+export function subscribeBuenaTierraClasses(callback) {
+    return onSnapshot(collection(db, 'buenaTierraClasses'), (snap) => {
+        callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    }, (err) => console.error('Error sincronizando las clases de Buena Tierra', err))
+}
+
+export function updateBuenaTierraClass(classId, data) {
+    return setDoc(doc(db, 'buenaTierraClasses', classId), data, { merge: true })
+        .catch(err => console.error('No se pudo actualizar la clase de Buena Tierra', err))
+}
+
+export function subscribeBuenaTierraSettings(callback) {
+    return onSnapshot(doc(db, 'buenaTierraSettings', 'main'), (snap) => {
+        callback(snap.exists() ? snap.data() : { leader_member_id: null })
+    }, (err) => console.error('Error sincronizando el líder de Buena Tierra', err))
+}
+
+export function setBuenaTierraLeader(memberId) {
+    return setDoc(doc(db, 'buenaTierraSettings', 'main'), { leader_member_id: memberId }, { merge: true })
+        .catch(err => console.error('No se pudo asignar el líder de Buena Tierra', err))
+}
+
 // Visitantes cuya PRIMERA asistencia registrada ocurrió en el servicio
 // dado — para la presentación de bienvenida y el panel de consulta rápida
 // del Equipo de Bienvenida durante el culto. Si ya tenían asistencias

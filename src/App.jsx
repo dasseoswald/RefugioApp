@@ -18,6 +18,8 @@ import SettingsPage from './pages/admin/SettingsPage.jsx'
 import GroupDashboardPage from './pages/shared/GroupDashboardPage.jsx'
 import EscuelaDiscipuloPage from './pages/admin/EscuelaDiscipuloPage.jsx'
 import RefugiosPage from './pages/admin/RefugiosPage.jsx'
+import BuenaTierraPage from './pages/admin/BuenaTierraPage.jsx'
+import NuevosPage from './pages/bienvenida/NuevosPage.jsx'
 import BroadcastPage from './pages/admin/BroadcastPage.jsx'
 import PrayerRequestsPage from './pages/shared/PrayerRequestsPage.jsx'
 import EventsPage from './pages/shared/EventsPage.jsx'
@@ -56,7 +58,7 @@ function AppLayout({ children }) {
     )
 }
 
-const DEFAULT_ROUTES = { admin: '/admin', controller: '/controller', tesorero: '/tesorero', attendee: '/attendee' }
+const DEFAULT_ROUTES = { admin: '/admin', controller: '/controller', tesorero: '/tesorero', attendee: '/attendee', bienvenida: '/bienvenida' }
 const SPLASH_DURATION_MS = 2000
 
 function SplashScreen() {
@@ -218,6 +220,24 @@ export default function App() {
                 </ProtectedRoute>
             } />
 
+            {/* Bienvenida routes */}
+            <Route path="/bienvenida" element={
+                <ProtectedRoute allowedRoles={['bienvenida']}>
+                    <AppLayout><NuevosPage /></AppLayout>
+                </ProtectedRoute>
+            } />
+            <Route path="/bienvenida/profile" element={
+                <ProtectedRoute allowedRoles={['bienvenida']}>
+                    <AppLayout><ProfilePage /></AppLayout>
+                </ProtectedRoute>
+            } />
+            {/* El admin también ve el panel de Nuevos, desde su propia ruta */}
+            <Route path="/admin/nuevos" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                    <AppLayout><NuevosPage /></AppLayout>
+                </ProtectedRoute>
+            } />
+
             {/* Custom group routes */}
             <Route path="/:role/grupos/escuela-discipulo" element={
                 <ProtectedRoute allowedRoles={['admin', 'controller']}>
@@ -229,41 +249,46 @@ export default function App() {
                     <AppLayout><RefugiosPage /></AppLayout>
                 </ProtectedRoute>
             } />
+            <Route path="/:role/grupos/buena-tierra" element={
+                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero', 'bienvenida']}>
+                    <AppLayout><BuenaTierraPage /></AppLayout>
+                </ProtectedRoute>
+            } />
 
             <Route path="/:role/oraciones" element={
-                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero']}>
+                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero', 'bienvenida']}>
                     <AppLayout><PrayerRequestsPage /></AppLayout>
                 </ProtectedRoute>
             } />
             <Route path="/:role/eventos" element={
-                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero']}>
+                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero', 'bienvenida']}>
                     <AppLayout><EventsPage /></AppLayout>
                 </ProtectedRoute>
             } />
             <Route path="/:role/chat" element={
-                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero']}>
+                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero', 'bienvenida']}>
                     <AppLayout><LiveChatPage /></AppLayout>
                 </ProtectedRoute>
             } />
             <Route path="/:role/foro" element={
-                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero']}>
+                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero', 'bienvenida']}>
                     <AppLayout><ForumPage /></AppLayout>
                 </ProtectedRoute>
             } />
             <Route path="/:role/radio" element={
-                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero']}>
+                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero', 'bienvenida']}>
                     <AppLayout><RadioPage /></AppLayout>
                 </ProtectedRoute>
             } />
             <Route path="/:role/biblia" element={
-                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero']}>
+                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero', 'bienvenida']}>
                     <AppLayout><BibliaPage /></AppLayout>
                 </ProtectedRoute>
             } />
 
             {/* Group dashboard routes */}
             <Route path="/:role/grupos/:groupId" element={
-                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero']}>
+                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero', 'bienvenida']}>
                     <AppLayout><GroupDashboardPage /></AppLayout>
                 </ProtectedRoute>
             } />

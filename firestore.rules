@@ -28,6 +28,19 @@ service cloud.firestore {
       return hasRole('admin') || hasRole('controller');
     }
 
+    // ---------- Buena Tierra (clases de niños) ----------
+    function isBuenaTierraTeacherOf(classId) {
+      return isMiembro() && exists(/databases/$(database)/documents/buenaTierraClasses/$(classId)) && (
+        myRoleDoc().member_id in get(/databases/$(database)/documents/buenaTierraClasses/$(classId)).data.teacher_ids ||
+        myRoleDoc().member_id in get(/databases/$(database)/documents/buenaTierraClasses/$(classId)).data.helper_ids
+      );
+    }
+
+    function isBuenaTierraLeader() {
+      return isMiembro() && exists(/databases/$(database)/documents/buenaTierraSettings/main)
+        && myRoleDoc().member_id == get(/databases/$(database)/documents/buenaTierraSettings/main).data.leader_member_id;
+    }
+
     // ---------- Finanzas: confidencial, solo Tesorero (ni admin) ----------
     match /offerings/{docId} {
       allow read, write: if hasRole('tesorero');
@@ -96,7 +109,12 @@ service cloud.firestore {
       allow read: if isMiembro();
       allow create: if isSignedIn() && (
         isStaff() ||
-        request.resource.data.member_id == myRoleDoc().member_id
+        request.resource.data.member_id == myRoleDoc().member_id ||
+        // Un maestro/ayudante de Buena Tierra puede registrar la asistencia
+        // de los niños de SU clase (no de cualquier miembro).
+        (isMiembro()
+          && get(/databases/$(database)/documents/members/$(request.resource.data.member_id)).data.get('buena_tierra_class', null) != null
+          && isBuenaTierraTeacherOf(get(/databases/$(database)/documents/members/$(request.resource.data.member_id)).data.buena_tierra_class))
       );
       allow update, delete: if isStaff();
     }
@@ -143,12 +161,24 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // ---------- Buena Tierra: clases y liderazgo ----------
+    // Cambiar rango de edad o asignar maestros/ayudantes: solo admin o quien
+    // esté designado como líder principal de Buena Tierra.
+    match /buenaTierraClasses/{classId} {
+      allow read: if isMiembro();
+      allow write: if hasRole('admin') || isBuenaTierraLeader();
+    }
+    match /buenaTierraSettings/{docId} {
+      allow read: if isMiembro();
+      allow write: if hasRole('admin');
+    }
+
     // ---------- Resto de colecciones ----------
     // memberProfiles, services, foro, anuncios, etc.: cualquier miembro
     // aprobado (no cualquier cuenta de Google autenticada).
     match /{collection}/{docId} {
       allow read, write: if isMiembro()
-        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments']);
+        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings']);
     }
   }
 }

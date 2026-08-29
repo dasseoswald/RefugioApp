@@ -27,6 +27,10 @@ function getCurrentWeekDate(weekday) {
 const SERVICE_TYPES = {
     sunday: { label: 'Domingo', weekday: 0, defaultName: 'Servicio Dominical', starts_at: '07:00', ends_at: '13:00' },
     thursday: { label: 'Jueves', weekday: 4, defaultName: 'Servicio de Jueves', starts_at: '20:00', ends_at: '22:00' },
+    // Asistencia propia de las clases de niños (Paz/Alegría/Faith), paralela
+    // al culto dominical — ver BuenaTierraPage.jsx para el tema/cita y la
+    // asistencia por clase; acá solo se administra como cualquier otro tipo.
+    'buena-tierra': { label: 'Buena Tierra', weekday: 0, defaultName: 'Buena Tierra', starts_at: '07:00', ends_at: '13:00' },
 }
 
 export default function ServicesPage() {
