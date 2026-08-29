@@ -28,6 +28,14 @@ service cloud.firestore {
       return hasRole('admin') || hasRole('controller');
     }
 
+    // Líder de CUALQUIER ministerio (member_type == 'Líder' en su ficha de
+    // miembro) — no depende del rol de la cuenta, así un asistente que
+    // lidera un grupo puede crear eventos sin necesitar ser admin/controlador.
+    function isMinistryLeader() {
+      return isMiembro() && myRoleDoc().member_id != null
+        && get(/databases/$(database)/documents/members/$(myRoleDoc().member_id)).data.member_type == 'Líder';
+    }
+
     // ---------- Buena Tierra (clases de niños) ----------
     function isBuenaTierraTeacherOf(classId) {
       return isMiembro() && exists(/databases/$(database)/documents/buenaTierraClasses/$(classId)) && (
@@ -175,12 +183,36 @@ service cloud.firestore {
       allow write: if hasRole('admin');
     }
 
+    // ---------- Eventos (incluye cadenas de oración/ayuno) ----------
+    // Crear un evento: staff o líder de cualquier ministerio. Editar/borrar:
+    // staff, o el propio líder que lo creó (created_by_uid == su uid).
+    match /events/{docId} {
+      allow read: if isMiembro();
+      allow create: if isStaff() || (isMinistryLeader() && request.resource.data.created_by_uid == request.auth.uid);
+      allow update, delete: if isStaff() || (isMinistryLeader() && resource.data.created_by_uid == request.auth.uid);
+    }
+    // Inscripción a un evento normal: cada quien inscribe/cancela la suya.
+    match /eventRegistrations/{docId} {
+      allow read: if isMiembro();
+      allow create: if isMiembro() && request.resource.data.member_id == myRoleDoc().member_id;
+      allow delete: if isMiembro() && (resource.data.member_id == myRoleDoc().member_id || isStaff());
+      // Solo el equipo cambia el método de pago de una inscripción.
+      allow update: if isStaff();
+    }
+    // Turno de una cadena de oración/ayuno: mismo esquema que las inscripciones.
+    match /eventChainSignups/{docId} {
+      allow read: if isMiembro();
+      allow create: if isMiembro() && request.resource.data.member_id == myRoleDoc().member_id;
+      allow delete: if isMiembro() && (resource.data.member_id == myRoleDoc().member_id || isStaff());
+      allow update: if false;
+    }
+
     // ---------- Resto de colecciones ----------
     // memberProfiles, services, foro, anuncios, etc.: cualquier miembro
     // aprobado (no cualquier cuenta de Google autenticada).
     match /{collection}/{docId} {
       allow read, write: if isMiembro()
-        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings']);
+        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'events', 'eventRegistrations', 'eventChainSignups']);
     }
   }
 }

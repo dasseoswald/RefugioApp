@@ -1601,8 +1601,33 @@ export function markPrayerAnswered(id, gratitudeContent) {
 }
 
 // ============== EVENTOS ==============
+// Antes vivían solo en memoria (se perdían al recargar y no se veían entre
+// distintos usuarios) — se sincronizan con Firestore igual que anuncios,
+// siguiendo el mismo patrón (caché local + listeners + sync perezoso).
 
-const EVENTS = []
+let EVENTS = []
+let eventListeners = []
+let eventsSyncStarted = false
+let eventsLoaded = false
+
+function notifyEventListeners() { eventListeners.forEach(fn => fn()) }
+export function isEventsLoaded() { return eventsLoaded }
+
+function startEventsSync() {
+    if (eventsSyncStarted) return
+    eventsSyncStarted = true
+    onSnapshot(collection(db, 'events'), (snap) => {
+        EVENTS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        eventsLoaded = true
+        notifyEventListeners()
+    }, (err) => { console.error('Error sincronizando eventos', err); eventsLoaded = true; notifyEventListeners() })
+}
+
+export function subscribeEvents(callback) {
+    eventListeners.push(callback)
+    startEventsSync()
+    return () => { eventListeners = eventListeners.filter(fn => fn !== callback) }
+}
 
 export function getEvents() {
     return [...EVENTS].sort((a, b) => new Date(a.start_date) - new Date(b.start_date))
@@ -1613,8 +1638,8 @@ export function getEventById(id) {
 }
 
 export function createEvent(data) {
+    const id = `event-${Date.now()}-${Math.floor(Math.random() * 1000)}`
     const newEvent = {
-        id: `event-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         name: data.name,
         start_date: data.start_date,
         days: parseInt(data.days) || 1,
@@ -1625,32 +1650,71 @@ export function createEvent(data) {
         price: data.price || 'Gratis',
         poster_url: data.poster_url || null,
         created_by: data.created_by || null,
+        created_by_uid: data.created_by_uid || null,
+        // "evento" normal, o "cadena" (cadena de oración/ayuno con turnos).
+        event_type: data.event_type || 'evento',
+        chain_start_date: data.chain_start_date || null,
+        chain_end_date: data.chain_end_date || null,
+        chain_mode: data.chain_mode || null, // 'day' | 'hour'
+        chain_daily_start: data.chain_daily_start || null,
+        chain_daily_end: data.chain_daily_end || null,
+        chain_slot_hours: data.chain_slot_hours ? Number(data.chain_slot_hours) : null,
         created_at: new Date().toISOString(),
     }
-    EVENTS.push(newEvent)
-    return newEvent
+    EVENTS = [...EVENTS, { id, ...newEvent }]
+    setDoc(doc(db, 'events', id), newEvent).catch(err => console.error('No se pudo guardar el evento', err))
+    notifyEventListeners()
+    return { id, ...newEvent }
 }
 
 export function updateEvent(id, data) {
     const idx = EVENTS.findIndex(e => e.id === id)
     if (idx === -1) return null
-    EVENTS[idx] = { ...EVENTS[idx], ...data, days: parseInt(data.days) || EVENTS[idx].days }
-    return EVENTS[idx]
+    const updated = { ...EVENTS[idx], ...data, days: parseInt(data.days) || EVENTS[idx].days }
+    EVENTS = EVENTS.map((e, i) => (i === idx ? updated : e))
+    const { id: _id, ...rest } = updated
+    updateDoc(doc(db, 'events', id), rest).catch(err => console.error('No se pudo actualizar el evento', err))
+    notifyEventListeners()
+    return updated
 }
 
 export function deleteEvent(id) {
     const idx = EVENTS.findIndex(e => e.id === id)
     if (idx === -1) return false
-    EVENTS.splice(idx, 1)
-    for (let i = EVENT_REGISTRATIONS.length - 1; i >= 0; i--) {
-        if (EVENT_REGISTRATIONS[i].event_id === id) EVENT_REGISTRATIONS.splice(i, 1)
-    }
+    EVENTS = EVENTS.filter(e => e.id !== id)
+    deleteDoc(doc(db, 'events', id)).catch(err => console.error('No se pudo eliminar el evento', err))
+    notifyEventListeners()
+    EVENT_REGISTRATIONS.filter(r => r.event_id === id).forEach(r => {
+        deleteDoc(doc(db, 'eventRegistrations', r.id)).catch(() => {})
+    })
+    EVENT_REGISTRATIONS = EVENT_REGISTRATIONS.filter(r => r.event_id !== id)
     return true
 }
 
 // ---- Inscripciones a Eventos ----
 
-const EVENT_REGISTRATIONS = []
+let EVENT_REGISTRATIONS = []
+let eventRegListeners = []
+let eventRegsSyncStarted = false
+
+function notifyEventRegListeners() { eventRegListeners.forEach(fn => fn()) }
+
+function startEventRegsSync() {
+    if (eventRegsSyncStarted) return
+    eventRegsSyncStarted = true
+    onSnapshot(collection(db, 'eventRegistrations'), (snap) => {
+        EVENT_REGISTRATIONS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        notifyEventRegListeners()
+    }, (err) => console.error('Error sincronizando inscripciones a eventos', err))
+}
+
+// Igual que subscribeEvents, pero para las inscripciones — ambos se piden
+// juntos desde EventsPage.jsx.
+export function subscribeEventRegistrations(callback) {
+    eventRegListeners.push(callback)
+    startEventRegsSync()
+    return () => { eventRegListeners = eventRegListeners.filter(fn => fn !== callback) }
+}
 
 export function getEventRegistrations(eventId) {
     return EVENT_REGISTRATIONS
@@ -1673,8 +1737,8 @@ export function registerForEvent(eventId, memberId, fallbackName) {
         return { error: 'Ya estás inscrito en este evento' }
     }
     const member = getMemberById(memberId)
+    const id = `evreg-${Date.now()}-${Math.floor(Math.random() * 1000)}`
     const registration = {
-        id: `evreg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         event_id: eventId,
         member_id: memberId,
         name: member?.full_name || fallbackName || 'Sin nombre',
@@ -1683,22 +1747,122 @@ export function registerForEvent(eventId, memberId, fallbackName) {
         payment_method: '',
         created_at: new Date().toISOString(),
     }
-    EVENT_REGISTRATIONS.push(registration)
-    return { data: registration }
+    EVENT_REGISTRATIONS = [...EVENT_REGISTRATIONS, { id, ...registration }]
+    setDoc(doc(db, 'eventRegistrations', id), registration).catch(err => console.error('No se pudo guardar la inscripción', err))
+    notifyEventRegListeners()
+    return { data: { id, ...registration } }
 }
 
 export function unregisterFromEvent(eventId, memberId) {
-    const idx = EVENT_REGISTRATIONS.findIndex(r => r.event_id === eventId && r.member_id === memberId)
-    if (idx === -1) return false
-    EVENT_REGISTRATIONS.splice(idx, 1)
+    const reg = EVENT_REGISTRATIONS.find(r => r.event_id === eventId && r.member_id === memberId)
+    if (!reg) return false
+    EVENT_REGISTRATIONS = EVENT_REGISTRATIONS.filter(r => r.id !== reg.id)
+    deleteDoc(doc(db, 'eventRegistrations', reg.id)).catch(err => console.error('No se pudo cancelar la inscripción', err))
+    notifyEventRegListeners()
     return true
 }
 
 export function setEventRegistrationPaymentMethod(registrationId, method) {
     const reg = EVENT_REGISTRATIONS.find(r => r.id === registrationId)
     if (!reg) return null
-    reg.payment_method = method
-    return reg
+    const updated = { ...reg, payment_method: method }
+    EVENT_REGISTRATIONS = EVENT_REGISTRATIONS.map(r => (r.id === registrationId ? updated : r))
+    updateDoc(doc(db, 'eventRegistrations', registrationId), { payment_method: method }).catch(err => console.error('No se pudo actualizar el pago', err))
+    notifyEventRegListeners()
+    return updated
+}
+
+// ---- Cadena de oración/ayuno: turnos ----
+// Los turnos NO se guardan como documentos — se calculan al vuelo a partir
+// de la configuración del evento (chain_start_date/end_date/mode/etc.), como
+// ya se hace con getUpcomingAlabanzaOccasions(). Cada turno tiene una key
+// determinística (día: "2026-09-01"; hora: "2026-09-01_06:00") contra la que
+// se guardan las inscripciones — así nunca hay que migrar turnos si cambia
+// la configuración, y no hay riesgo de que un turno "huérfano" quede sin
+// borrar.
+export function getChainSlots(event) {
+    if (event?.event_type !== 'cadena' || !event.chain_start_date || !event.chain_end_date) return []
+    const [sy, sm, sd] = event.chain_start_date.split('-').map(Number)
+    const [ey, em, ed] = event.chain_end_date.split('-').map(Number)
+    const start = new Date(sy, sm - 1, sd)
+    const end = new Date(ey, em - 1, ed)
+    const slots = []
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        const dateLabel = d.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'short' })
+        if (event.chain_mode === 'hour' && event.chain_daily_start && event.chain_daily_end && event.chain_slot_hours) {
+            const [startH, startMin] = event.chain_daily_start.split(':').map(Number)
+            const [endH, endMin] = event.chain_daily_end.split(':').map(Number)
+            const startMinutes = startH * 60 + (startMin || 0)
+            const endMinutes = endH * 60 + (endMin || 0)
+            const step = event.chain_slot_hours * 60
+            for (let m = startMinutes; m < endMinutes; m += step) {
+                const blockEnd = Math.min(m + step, endMinutes)
+                const label = (mins) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`
+                slots.push({
+                    key: `${dateStr}_${label(m)}`,
+                    label: `${dateLabel} · ${label(m)} - ${label(blockEnd)}`,
+                })
+            }
+        } else {
+            slots.push({ key: dateStr, label: dateLabel })
+        }
+    }
+    return slots
+}
+
+let CHAIN_SIGNUPS = []
+let chainSignupListeners = []
+let chainSignupsSyncStarted = false
+
+function notifyChainSignupListeners() { chainSignupListeners.forEach(fn => fn()) }
+
+function startChainSignupsSync() {
+    if (chainSignupsSyncStarted) return
+    chainSignupsSyncStarted = true
+    onSnapshot(collection(db, 'eventChainSignups'), (snap) => {
+        CHAIN_SIGNUPS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        notifyChainSignupListeners()
+    }, (err) => console.error('Error sincronizando turnos de la cadena', err))
+}
+
+export function subscribeChainSignups(callback) {
+    chainSignupListeners.push(callback)
+    startChainSignupsSync()
+    return () => { chainSignupListeners = chainSignupListeners.filter(fn => fn !== callback) }
+}
+
+export function getChainSignupsForEvent(eventId) {
+    return CHAIN_SIGNUPS.filter(s => s.event_id === eventId)
+}
+
+export function signUpForChainSlot(eventId, slotKey, member, memberUid) {
+    if (!member?.id) return { error: 'No se pudo identificar tu perfil de miembro' }
+    if (CHAIN_SIGNUPS.some(s => s.event_id === eventId && s.slot_key === slotKey && s.member_id === member.id)) {
+        return { error: 'Ya estás anotado en este turno' }
+    }
+    const id = `chainsignup-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    const signup = {
+        event_id: eventId,
+        slot_key: slotKey,
+        member_id: member.id,
+        member_uid: memberUid || null,
+        name: member.full_name,
+        created_at: new Date().toISOString(),
+    }
+    CHAIN_SIGNUPS = [...CHAIN_SIGNUPS, { id, ...signup }]
+    setDoc(doc(db, 'eventChainSignups', id), signup).catch(err => console.error('No se pudo guardar el turno', err))
+    notifyChainSignupListeners()
+    return { data: { id, ...signup } }
+}
+
+export function cancelChainSlotSignup(eventId, slotKey, memberId) {
+    const signup = CHAIN_SIGNUPS.find(s => s.event_id === eventId && s.slot_key === slotKey && s.member_id === memberId)
+    if (!signup) return false
+    CHAIN_SIGNUPS = CHAIN_SIGNUPS.filter(s => s.id !== signup.id)
+    deleteDoc(doc(db, 'eventChainSignups', signup.id)).catch(err => console.error('No se pudo quitar el turno', err))
+    notifyChainSignupListeners()
+    return true
 }
 
 // ---- Anuncios (Presentación en vivo) ----

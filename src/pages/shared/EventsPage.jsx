@@ -2,14 +2,16 @@ import { useState, useEffect, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import {
-    getEvents, createEvent, updateEvent, deleteEvent,
-    getEventRegistrations, getEventRegistrationCount, isRegisteredForEvent, registerForEvent, unregisterFromEvent,
-    setEventRegistrationPaymentMethod
+    getEvents, subscribeEvents, createEvent, updateEvent, deleteEvent,
+    getEventRegistrations, subscribeEventRegistrations, getEventRegistrationCount, isRegisteredForEvent, registerForEvent, unregisterFromEvent,
+    setEventRegistrationPaymentMethod, getMemberById,
+    getChainSlots, subscribeChainSignups, getChainSignupsForEvent, signUpForChainSlot, cancelChainSlotSignup,
 } from '../../data/mockData.js'
 import Modal from '../../components/ui/Modal.jsx'
 import {
     PartyPopper, Plus, Calendar, Clock, MapPin, DollarSign, Image as ImageIcon,
-    Edit2, Trash2, X, Map, ExternalLink, CheckCircle2, UserPlus, Users, Phone, Mail, FileSpreadsheet
+    Edit2, Trash2, X, Map, ExternalLink, CheckCircle2, UserPlus, Users, Phone, Mail, FileSpreadsheet,
+    HandHeart, ListChecks,
 } from 'lucide-react'
 
 const PAYMENT_METHODS = [
@@ -20,11 +22,21 @@ const PAYMENT_METHODS = [
 ]
 const PAYMENT_LABELS = Object.fromEntries(PAYMENT_METHODS.map(m => [m.value, m.label]))
 
-const EMPTY_FORM = { name: '', start_date: '', days: 1, starts_at: '', ends_at: '', location: '', price: 'Gratis', poster_url: null }
+const EMPTY_FORM = {
+    name: '', start_date: '', days: 1, starts_at: '', ends_at: '', location: '', price: 'Gratis', poster_url: null,
+    event_type: 'evento',
+    chain_start_date: '', chain_end_date: '', chain_mode: 'day',
+    chain_daily_start: '06:00', chain_daily_end: '22:00', chain_slot_hours: 1,
+}
 
 export default function EventsPage() {
     const { user } = useAuth()
-    const canManage = user?.role === 'admin' || user?.role === 'controller'
+    const myMember = user?.member_id ? getMemberById(user.member_id) : null
+    // Un líder de CUALQUIER ministerio (no solo admin/controlador) puede
+    // crear y administrar sus propios eventos — ver isMinistryLeader en
+    // firestore.rules, mismo criterio (member_type === 'Líder').
+    const isMinistryLeader = myMember?.member_type === 'Líder'
+    const canManage = user?.role === 'admin' || user?.role === 'controller' || isMinistryLeader
 
     const [events, setEvents] = useState([])
     const [showModal, setShowModal] = useState(false)
@@ -34,9 +46,29 @@ export default function EventsPage() {
     const [deletingEvent, setDeletingEvent] = useState(null)
     const [notification, setNotification] = useState(null)
     const [viewingEvent, setViewingEvent] = useState(null)
+    const [chainEvent, setChainEvent] = useState(null)
+    const [chainSignups, setChainSignups] = useState([])
     const fileInputRef = useRef(null)
+    // Se lee dentro del listener de subscribeChainSignups (más abajo), que se
+    // registra una sola vez al montar — sin el ref, ese listener quedaría
+    // "congelado" viendo siempre el chainEvent de cuando se montó (null).
+    const chainEventRef = useRef(null)
 
-    useEffect(() => { refreshData() }, [])
+    useEffect(() => {
+        const unsubEvents = subscribeEvents(refreshData)
+        const unsubRegs = subscribeEventRegistrations(refreshData)
+        const unsubSignups = subscribeChainSignups(() => {
+            if (chainEventRef.current) setChainSignups(getChainSignupsForEvent(chainEventRef.current))
+        })
+        refreshData()
+        return () => { unsubEvents(); unsubRegs(); unsubSignups() }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    useEffect(() => {
+        chainEventRef.current = chainEvent?.id || null
+        if (chainEvent) setChainSignups(getChainSignupsForEvent(chainEvent.id))
+    }, [chainEvent])
 
     const refreshData = () => setEvents(getEvents())
 
@@ -57,6 +89,11 @@ export default function EventsPage() {
             name: event.name, start_date: event.start_date, days: event.days,
             starts_at: event.starts_at, ends_at: event.ends_at, location: event.location,
             price: event.price, poster_url: event.poster_url,
+            event_type: event.event_type || 'evento',
+            chain_start_date: event.chain_start_date || '', chain_end_date: event.chain_end_date || '',
+            chain_mode: event.chain_mode || 'day',
+            chain_daily_start: event.chain_daily_start || '06:00', chain_daily_end: event.chain_daily_end || '22:00',
+            chain_slot_hours: event.chain_slot_hours || 1,
         })
         setShowModal(true)
     }
@@ -74,14 +111,23 @@ export default function EventsPage() {
         if (fileInputRef.current) fileInputRef.current.value = ''
     }
 
+    const isChain = form.event_type === 'cadena'
+    const canSave = isChain
+        ? form.name.trim() && form.chain_start_date && form.chain_end_date && form.location.trim()
+        : form.name.trim() && form.start_date && form.location.trim()
+
     const handleSave = () => {
-        if (!form.name.trim() || !form.start_date || !form.location.trim()) return
+        if (!canSave) return
+        // Para una cadena, la fecha de inicio general es la del rango (así
+        // getEvents() la sigue pudiendo ordenar cronológicamente igual que a
+        // los eventos normales).
+        const payload = isChain ? { ...form, start_date: form.chain_start_date } : form
         if (editingEvent) {
-            updateEvent(editingEvent.id, form)
+            updateEvent(editingEvent.id, payload)
             showNotification('Evento actualizado exitosamente')
         } else {
-            createEvent({ ...form, created_by: user?.name })
-            showNotification('Evento publicado exitosamente')
+            createEvent({ ...payload, created_by: user?.name, created_by_uid: user?.auth_uid })
+            showNotification(isChain ? 'Cadena publicada exitosamente' : 'Evento publicado exitosamente')
         }
         setShowModal(false)
         refreshData()
@@ -105,6 +151,15 @@ export default function EventsPage() {
         return `${start.toLocaleDateString('es', { day: 'numeric', month: 'short' })} al ${endLabel}`
     }
 
+    const formatChainRange = (event) => {
+        if (!event.chain_start_date || !event.chain_end_date) return ''
+        const [sy, sm, sd] = event.chain_start_date.split('-').map(Number)
+        const [ey, em, ed] = event.chain_end_date.split('-').map(Number)
+        const start = new Date(sy, sm - 1, sd)
+        const end = new Date(ey, em - 1, ed)
+        return `${start.toLocaleDateString('es', { day: 'numeric', month: 'short' })} al ${end.toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })}`
+    }
+
     const mapsEmbedUrl = (location) => `https://maps.google.com/maps?q=${encodeURIComponent(location)}&output=embed`
     const mapsLinkUrl = (location) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`
 
@@ -122,6 +177,16 @@ export default function EventsPage() {
         unregisterFromEvent(event.id, user?.member_id)
         showNotification(`Cancelaste tu inscripción en "${event.name}"`)
         refreshData()
+    }
+
+    const handleToggleChainSlot = (event, slotKey, alreadyIn) => {
+        if (!user?.member_id) return
+        if (alreadyIn) {
+            cancelChainSlotSignup(event.id, slotKey, user.member_id)
+        } else {
+            const result = signUpForChainSlot(event.id, slotKey, { id: user.member_id, full_name: user.name }, user.auth_uid)
+            if (result.error) showNotification(result.error)
+        }
     }
 
     const handleSetPaymentMethod = (registrationId, method) => {
@@ -197,7 +262,11 @@ export default function EventsPage() {
                                         <PartyPopper className="w-12 h-12 text-white/60" />
                                     </div>
                                 )}
-                                {event.days > 1 && (
+                                {event.event_type === 'cadena' ? (
+                                    <span className="absolute top-3 left-3 text-xs font-bold px-2.5 py-1 rounded-full bg-black/60 text-white backdrop-blur-sm flex items-center gap-1">
+                                        <HandHeart className="w-3 h-3" /> Cadena
+                                    </span>
+                                ) : event.days > 1 && (
                                     <span className="absolute top-3 left-3 text-xs font-bold px-2.5 py-1 rounded-full bg-black/60 text-white backdrop-blur-sm">
                                         {event.days} días
                                     </span>
@@ -220,9 +289,10 @@ export default function EventsPage() {
                             <div className="p-5 space-y-2.5">
                                 <h3 className="text-base font-bold text-[#111111]">{event.name}</h3>
                                 <div className="text-sm text-[#6E6E6E] flex items-center gap-2 capitalize">
-                                    <Calendar className="w-4 h-4 text-[#E8A838] flex-shrink-0" /> {formatDateRange(event)}
+                                    <Calendar className="w-4 h-4 text-[#E8A838] flex-shrink-0" />
+                                    {event.event_type === 'cadena' ? formatChainRange(event) : formatDateRange(event)}
                                 </div>
-                                {(event.starts_at || event.ends_at) && (
+                                {event.event_type !== 'cadena' && (event.starts_at || event.ends_at) && (
                                     <div className="text-sm text-[#6E6E6E] flex items-center gap-2">
                                         <Clock className="w-4 h-4 text-[#E8A838] flex-shrink-0" />
                                         {event.starts_at}{event.ends_at ? ` - ${event.ends_at}` : ''}
@@ -233,12 +303,14 @@ export default function EventsPage() {
                                     <span className="flex-1">{event.location}</span>
                                 </div>
                                 <div className="flex items-center justify-between pt-1">
-                                    <span className="text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1"
-                                        style={{ background: event.price.toLowerCase() === 'gratis' ? '#E1F9EC' : '#E8F4FC', color: event.price.toLowerCase() === 'gratis' ? '#13CD68' : '#2696D2' }}>
-                                        <DollarSign className="w-3 h-3" /> {event.price}
-                                    </span>
+                                    {event.event_type !== 'cadena' && (
+                                        <span className="text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1"
+                                            style={{ background: event.price.toLowerCase() === 'gratis' ? '#E1F9EC' : '#E8F4FC', color: event.price.toLowerCase() === 'gratis' ? '#13CD68' : '#2696D2' }}>
+                                            <DollarSign className="w-3 h-3" /> {event.price}
+                                        </span>
+                                    )}
                                     <button onClick={() => setExpandedMapId(expandedMapId === event.id ? null : event.id)}
-                                        className="text-xs font-medium text-[#2696D2] hover:underline cursor-pointer flex items-center gap-1">
+                                        className="text-xs font-medium text-[#2696D2] hover:underline cursor-pointer flex items-center gap-1 ml-auto">
                                         <Map className="w-3.5 h-3.5" /> {expandedMapId === event.id ? 'Ocultar mapa' : 'Ver mapa'}
                                     </button>
                                 </div>
@@ -257,34 +329,44 @@ export default function EventsPage() {
                                     </div>
                                 )}
 
-                                {/* Inscripción */}
-                                <div className="pt-2 mt-1 border-t border-gray-100 flex items-center justify-between">
-                                    <span className="text-xs font-medium text-[#6E6E6E] flex items-center gap-1.5">
-                                        <Users className="w-3.5 h-3.5" /> {getEventRegistrationCount(event.id)} inscrito{getEventRegistrationCount(event.id) === 1 ? '' : 's'}
-                                    </span>
-                                    {canManage && (
-                                        <button onClick={() => setViewingEvent(event)}
-                                            className="text-xs font-medium text-[#2696D2] hover:underline cursor-pointer">
-                                            Ver inscritos
-                                        </button>
-                                    )}
-                                </div>
-                                {!user?.member_id ? (
-                                    <button disabled title="No tienes un perfil de miembro vinculado a tu usuario"
-                                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border-2 border-gray-200 text-gray-300 cursor-not-allowed">
-                                        <UserPlus className="w-4 h-4" /> Inscribirme
-                                    </button>
-                                ) : isRegisteredForEvent(event.id, user.member_id) ? (
-                                    <button onClick={() => handleUnregister(event)}
-                                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border-2 border-[#13CD68] text-[#13CD68] hover:bg-[#E1F9EC] transition-all cursor-pointer">
-                                        <CheckCircle2 className="w-4 h-4" /> Inscrito — Cancelar
+                                {event.event_type === 'cadena' ? (
+                                    <button onClick={() => setChainEvent(event)}
+                                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:shadow-md cursor-pointer mt-2"
+                                        style={{ background: 'linear-gradient(135deg, #2696D2, #1D74A8)' }}>
+                                        <ListChecks className="w-4 h-4" /> Ver turnos y anotarme
                                     </button>
                                 ) : (
-                                    <button onClick={() => handleRegister(event)}
-                                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:shadow-md cursor-pointer"
-                                        style={{ background: 'linear-gradient(135deg, #E8A838, #D09530)' }}>
-                                        <UserPlus className="w-4 h-4" /> Inscribirme
-                                    </button>
+                                    <>
+                                        {/* Inscripción */}
+                                        <div className="pt-2 mt-1 border-t border-gray-100 flex items-center justify-between">
+                                            <span className="text-xs font-medium text-[#6E6E6E] flex items-center gap-1.5">
+                                                <Users className="w-3.5 h-3.5" /> {getEventRegistrationCount(event.id)} inscrito{getEventRegistrationCount(event.id) === 1 ? '' : 's'}
+                                            </span>
+                                            {canManage && (
+                                                <button onClick={() => setViewingEvent(event)}
+                                                    className="text-xs font-medium text-[#2696D2] hover:underline cursor-pointer">
+                                                    Ver inscritos
+                                                </button>
+                                            )}
+                                        </div>
+                                        {!user?.member_id ? (
+                                            <button disabled title="No tienes un perfil de miembro vinculado a tu usuario"
+                                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border-2 border-gray-200 text-gray-300 cursor-not-allowed">
+                                                <UserPlus className="w-4 h-4" /> Inscribirme
+                                            </button>
+                                        ) : isRegisteredForEvent(event.id, user.member_id) ? (
+                                            <button onClick={() => handleUnregister(event)}
+                                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border-2 border-[#13CD68] text-[#13CD68] hover:bg-[#E1F9EC] transition-all cursor-pointer">
+                                                <CheckCircle2 className="w-4 h-4" /> Inscrito — Cancelar
+                                            </button>
+                                        ) : (
+                                            <button onClick={() => handleRegister(event)}
+                                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:shadow-md cursor-pointer"
+                                                style={{ background: 'linear-gradient(135deg, #E8A838, #D09530)' }}>
+                                                <UserPlus className="w-4 h-4" /> Inscribirme
+                                            </button>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         </div>
@@ -316,36 +398,104 @@ export default function EventsPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-[#111111] mb-1.5">Nombre del Evento *</label>
+                        <label className="block text-sm font-medium text-[#111111] mb-1.5">Tipo</label>
+                        <div className="flex gap-2">
+                            <button type="button" onClick={() => setForm(f => ({ ...f, event_type: 'evento' }))}
+                                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border-2 transition-all cursor-pointer ${!isChain ? 'text-white border-transparent' : 'border-gray-200 text-[#6E6E6E]'}`}
+                                style={!isChain ? { background: '#E8A838' } : {}}>
+                                <PartyPopper className="w-4 h-4" /> Evento
+                            </button>
+                            <button type="button" onClick={() => setForm(f => ({ ...f, event_type: 'cadena' }))}
+                                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border-2 transition-all cursor-pointer ${isChain ? 'text-white border-transparent' : 'border-gray-200 text-[#6E6E6E]'}`}
+                                style={isChain ? { background: '#2696D2' } : {}}>
+                                <HandHeart className="w-4 h-4" /> Cadena de oración/ayuno
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-[#111111] mb-1.5">Nombre {isChain ? 'de la Cadena' : 'del Evento'} *</label>
                         <input type="text" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
-                            placeholder="Ej: Congreso de Jóvenes 2026" className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#E8A838] text-sm" />
+                            placeholder={isChain ? 'Ej: Cadena de Ayuno de Aniversario' : 'Ej: Congreso de Jóvenes 2026'} className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#E8A838] text-sm" />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-[#111111] mb-1.5">Fecha de Inicio *</label>
-                            <input type="date" value={form.start_date} onChange={(e) => setForm(f => ({ ...f, start_date: e.target.value }))}
-                                className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#E8A838] text-sm" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-[#111111] mb-1.5">Duración (días) *</label>
-                            <input type="number" min="1" value={form.days} onChange={(e) => setForm(f => ({ ...f, days: e.target.value }))}
-                                className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#E8A838] text-sm" />
-                        </div>
-                    </div>
+                    {isChain ? (
+                        <>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-[#111111] mb-1.5">Desde *</label>
+                                    <input type="date" value={form.chain_start_date} onChange={(e) => setForm(f => ({ ...f, chain_start_date: e.target.value }))}
+                                        className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-[#111111] mb-1.5">Hasta *</label>
+                                    <input type="date" value={form.chain_end_date} onChange={(e) => setForm(f => ({ ...f, chain_end_date: e.target.value }))}
+                                        className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] text-sm" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-[#111111] mb-1.5">¿Cómo se dividen los turnos?</label>
+                                <div className="flex gap-2">
+                                    <button type="button" onClick={() => setForm(f => ({ ...f, chain_mode: 'day' }))}
+                                        className={`flex-1 px-4 py-2 rounded-xl text-sm font-medium border-2 cursor-pointer ${form.chain_mode === 'day' ? 'border-[#2696D2] text-[#2696D2] bg-[#E8F4FC]' : 'border-gray-200 text-[#6E6E6E]'}`}>
+                                        Por día completo
+                                    </button>
+                                    <button type="button" onClick={() => setForm(f => ({ ...f, chain_mode: 'hour' }))}
+                                        className={`flex-1 px-4 py-2 rounded-xl text-sm font-medium border-2 cursor-pointer ${form.chain_mode === 'hour' ? 'border-[#2696D2] text-[#2696D2] bg-[#E8F4FC]' : 'border-gray-200 text-[#6E6E6E]'}`}>
+                                        Por bloques de hora
+                                    </button>
+                                </div>
+                            </div>
+                            {form.chain_mode === 'hour' && (
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-[#111111] mb-1.5">Desde (hora)</label>
+                                        <input type="time" value={form.chain_daily_start} onChange={(e) => setForm(f => ({ ...f, chain_daily_start: e.target.value }))}
+                                            className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-[#111111] mb-1.5">Hasta (hora)</label>
+                                        <input type="time" value={form.chain_daily_end} onChange={(e) => setForm(f => ({ ...f, chain_daily_end: e.target.value }))}
+                                            className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-[#111111] mb-1.5">Bloque (horas)</label>
+                                        <input type="number" min="1" max="12" value={form.chain_slot_hours}
+                                            onChange={(e) => setForm(f => ({ ...f, chain_slot_hours: e.target.value }))}
+                                            className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] text-sm" />
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-[#111111] mb-1.5">Fecha de Inicio *</label>
+                                    <input type="date" value={form.start_date} onChange={(e) => setForm(f => ({ ...f, start_date: e.target.value }))}
+                                        className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#E8A838] text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-[#111111] mb-1.5">Duración (días) *</label>
+                                    <input type="number" min="1" value={form.days} onChange={(e) => setForm(f => ({ ...f, days: e.target.value }))}
+                                        className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#E8A838] text-sm" />
+                                </div>
+                            </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-[#111111] mb-1.5">Hora Inicio</label>
-                            <input type="time" value={form.starts_at} onChange={(e) => setForm(f => ({ ...f, starts_at: e.target.value }))}
-                                className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#E8A838] text-sm" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-[#111111] mb-1.5">Hora Término</label>
-                            <input type="time" value={form.ends_at} onChange={(e) => setForm(f => ({ ...f, ends_at: e.target.value }))}
-                                className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#E8A838] text-sm" />
-                        </div>
-                    </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-[#111111] mb-1.5">Hora Inicio</label>
+                                    <input type="time" value={form.starts_at} onChange={(e) => setForm(f => ({ ...f, starts_at: e.target.value }))}
+                                        className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#E8A838] text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-[#111111] mb-1.5">Hora Término</label>
+                                    <input type="time" value={form.ends_at} onChange={(e) => setForm(f => ({ ...f, ends_at: e.target.value }))}
+                                        className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#E8A838] text-sm" />
+                                </div>
+                            </div>
+                        </>
+                    )}
 
                     <div>
                         <label className="block text-sm font-medium text-[#111111] mb-1.5">Lugar *</label>
@@ -362,10 +512,10 @@ export default function EventsPage() {
                 </div>
                 <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
                     <button onClick={() => setShowModal(false)} className="px-5 py-2.5 rounded-xl border-2 border-gray-200 text-[#6E6E6E] font-medium text-sm hover:bg-gray-50 cursor-pointer">Cancelar</button>
-                    <button onClick={handleSave} disabled={!form.name.trim() || !form.start_date || !form.location.trim()}
+                    <button onClick={handleSave} disabled={!canSave}
                         className="px-5 py-2.5 rounded-xl text-white font-medium text-sm hover:shadow-lg disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                         style={{ background: 'linear-gradient(135deg, #E8A838, #D09530)' }}>
-                        {editingEvent ? 'Guardar Cambios' : 'Publicar Evento'}
+                        {editingEvent ? 'Guardar Cambios' : (isChain ? 'Publicar Cadena' : 'Publicar Evento')}
                     </button>
                 </div>
             </Modal>
@@ -436,6 +586,45 @@ export default function EventsPage() {
                                         </div>
                                     ))}
                                 </div>
+                            )}
+                        </div>
+                    )
+                })()}
+            </Modal>
+
+            {/* Turnos de la cadena de oración/ayuno */}
+            <Modal isOpen={!!chainEvent} onClose={() => setChainEvent(null)} title={`Turnos — ${chainEvent?.name || ''}`} size="lg">
+                {chainEvent && (() => {
+                    const slots = getChainSlots(chainEvent)
+                    return (
+                        <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                            {!user?.member_id && (
+                                <div className="bg-[#FFF3CD] text-[#8A6116] text-sm px-4 py-3 rounded-xl mb-2">
+                                    No tienes un perfil de miembro vinculado a tu usuario, así que no puedes anotarte.
+                                </div>
+                            )}
+                            {slots.length === 0 ? (
+                                <p className="text-sm text-[#6E6E6E] text-center py-8">Esta cadena todavía no tiene turnos configurados.</p>
+                            ) : (
+                                slots.map(slot => {
+                                    const slotSignups = chainSignups.filter(s => s.slot_key === slot.key)
+                                    const mine = slotSignups.find(s => s.member_id === user?.member_id)
+                                    return (
+                                        <div key={slot.key} className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-gray-50">
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-medium text-[#111111] capitalize">{slot.label}</p>
+                                                <p className="text-xs text-[#6E6E6E] truncate">
+                                                    {slotSignups.length === 0 ? 'Nadie anotado todavía' : slotSignups.map(s => s.name).join(', ')}
+                                                </p>
+                                            </div>
+                                            <button onClick={() => handleToggleChainSlot(chainEvent, slot.key, !!mine)} disabled={!user?.member_id}
+                                                className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${mine ? 'bg-[#13CD68] text-white' : 'bg-white border-2 border-[#2696D2] text-[#2696D2]'}`}>
+                                                {mine ? <CheckCircle2 className="w-3.5 h-3.5" /> : <UserPlus className="w-3.5 h-3.5" />}
+                                                {mine ? 'Anotado' : 'Anotarme'}
+                                            </button>
+                                        </div>
+                                    )
+                                })
                             )}
                         </div>
                     )
