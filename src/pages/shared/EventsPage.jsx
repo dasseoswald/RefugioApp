@@ -112,8 +112,12 @@ export default function EventsPage() {
     }
 
     const isChain = form.event_type === 'cadena'
+    // "Hasta" antes que "Desde" (o alguna vacía) deja el rango sin ningún
+    // día que recorrer — antes esto se guardaba igual y la cadena quedaba
+    // silenciosamente sin turnos, sin ningún aviso de qué había pasado.
+    const chainDatesValid = !!form.chain_start_date && !!form.chain_end_date && form.chain_end_date >= form.chain_start_date
     const canSave = isChain
-        ? form.name.trim() && form.chain_start_date && form.chain_end_date && form.location.trim()
+        ? form.name.trim() && chainDatesValid && form.location.trim()
         : form.name.trim() && form.start_date && form.location.trim()
 
     const handleSave = () => {
@@ -433,6 +437,9 @@ export default function EventsPage() {
                                         className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] text-sm" />
                                 </div>
                             </div>
+                            {form.chain_start_date && form.chain_end_date && !chainDatesValid && (
+                                <p className="text-xs text-[#E74C3C] -mt-2">"Hasta" debe ser igual o posterior a "Desde".</p>
+                            )}
                             <div>
                                 <label className="block text-sm font-medium text-[#111111] mb-1.5">¿Cómo se dividen los turnos?</label>
                                 <div className="flex gap-2">
@@ -604,7 +611,13 @@ export default function EventsPage() {
                                 </div>
                             )}
                             {slots.length === 0 ? (
-                                <p className="text-sm text-[#6E6E6E] text-center py-8">Esta cadena todavía no tiene turnos configurados.</p>
+                                <div className="text-center py-8">
+                                    <p className="text-sm text-[#6E6E6E]">Esta cadena no tiene turnos.</p>
+                                    <p className="text-xs text-[#6E6E6E] mt-1">
+                                        Revisa que tenga fecha "Desde" y "Hasta", y que "Hasta" no sea anterior a "Desde"
+                                        {canManage && ' (usa "Editar" en la tarjeta para corregirlo)'}.
+                                    </p>
+                                </div>
                             ) : (
                                 slots.map(slot => {
                                     const slotSignups = chainSignups.filter(s => s.slot_key === slot.key)
