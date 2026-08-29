@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { getMembers, createMember, updateMember, toggleMemberActive, deleteMember, getAttendancesByMember, getMemberRefugio, OPERATIONAL_GROUPS, WELCOME_CHECK_ACTIONS } from '../../data/mockData.js'
+import {
+    getMembers, createMember, updateMember, toggleMemberActive, deleteMember, getAttendancesByMember, getMemberRefugio,
+    OPERATIONAL_GROUPS, WELCOME_CHECK_ACTIONS, getPossibleDuplicateMembers, mergeMembers,
+} from '../../data/mockData.js'
 import Modal from '../../components/ui/Modal.jsx'
-import { Search, UserPlus, Edit2, ToggleLeft, ToggleRight, Users, Filter, ChevronLeft, ChevronRight, FileUser, Home, X, CheckCircle2, Circle, Trash2, AlertTriangle } from 'lucide-react'
+import { Search, UserPlus, Edit2, ToggleLeft, ToggleRight, Users, Filter, ChevronLeft, ChevronRight, FileUser, Home, X, CheckCircle2, Circle, Trash2, AlertTriangle, Merge } from 'lucide-react'
 
 const MEMBER_TYPES = ['Miembro Activo', 'Miembro Inactivo', 'Visitante', 'Servidor', 'Líder', 'Pastor']
 const CIVIL_STATUSES = ['Soltero', 'Casado', 'Viudo', 'Divorciado']
@@ -23,11 +26,33 @@ export default function MembersPage({ canToggleActive = false }) {
     const [formError, setFormError] = useState('')
     const [page, setPage] = useState(1)
     const [deletingMember, setDeletingMember] = useState(null)
+    const [duplicateGroups, setDuplicateGroups] = useState([])
+    const [mergingGroup, setMergingGroup] = useState(null)
+    const [keepMemberId, setKeepMemberId] = useState(null)
     const perPage = 8
 
     useEffect(() => { refreshMembers() }, [])
 
-    const refreshMembers = () => setMembers(getMembers())
+    const refreshMembers = () => {
+        setMembers(getMembers())
+        setDuplicateGroups(getPossibleDuplicateMembers())
+    }
+
+    const openMerge = (group) => {
+        setMergingGroup(group)
+        // Se sugiere conservar por defecto al que tenga más asistencias
+        // (probablemente la ficha "real" que la gente ya usa).
+        const suggested = [...group].sort((a, b) => getAttendancesByMember(b.id).length - getAttendancesByMember(a.id).length)[0]
+        setKeepMemberId(suggested.id)
+    }
+
+    const handleConfirmMerge = () => {
+        if (!mergingGroup || !keepMemberId) return
+        mergingGroup.filter(m => m.id !== keepMemberId).forEach(m => mergeMembers(keepMemberId, m.id))
+        setMergingGroup(null)
+        setKeepMemberId(null)
+        refreshMembers()
+    }
 
     const filtered = members.filter(m => {
         const matchSearch = m.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || (m.email || '').toLowerCase().includes(searchTerm.toLowerCase())
@@ -101,6 +126,27 @@ export default function MembersPage({ canToggleActive = false }) {
                     <UserPlus className="w-4 h-4" /> Nuevo Miembro
                 </button>
             </div>
+
+            {/* Posibles duplicados (mismo nombre, con o sin tildes) */}
+            {canToggleActive && duplicateGroups.length > 0 && (
+                <div className="bg-[#FFF3CD] rounded-2xl p-4 space-y-2">
+                    <p className="text-sm font-semibold text-[#8A6116] flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4" /> {duplicateGroups.length} posible{duplicateGroups.length === 1 ? '' : 's'} duplicado{duplicateGroups.length === 1 ? '' : 's'} de miembro
+                    </p>
+                    {duplicateGroups.map((group, i) => (
+                        <div key={i} className="flex items-center justify-between gap-3 bg-white/70 rounded-xl px-4 py-2.5 flex-wrap">
+                            <span className="text-sm text-[#111111]">
+                                {group.map(m => m.full_name).join('  ·  ')}
+                            </span>
+                            <button onClick={() => openMerge(group)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white cursor-pointer flex-shrink-0"
+                                style={{ background: '#E8A838' }}>
+                                <Merge className="w-3.5 h-3.5" /> Unificar
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* Filters */}
             <div className="flex flex-col sm:flex-row gap-3">
@@ -341,6 +387,43 @@ export default function MembersPage({ canToggleActive = false }) {
                         className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-medium text-sm hover:shadow-lg cursor-pointer"
                         style={{ background: '#E74C3C' }}>
                         <Trash2 className="w-4 h-4" /> Eliminar Definitivamente
+                    </button>
+                </div>
+            </Modal>
+
+            {/* Unificar duplicados */}
+            <Modal isOpen={!!mergingGroup} onClose={() => setMergingGroup(null)} title="Unificar Miembros Duplicados">
+                {mergingGroup && (
+                    <div className="space-y-4">
+                        <p className="text-sm text-[#6E6E6E]">
+                            Elige cuál ficha se conserva. Las asistencias, cuenta de usuario, notas e inscripciones de las demás se traspasan a esa ficha, y las otras se eliminan.
+                        </p>
+                        <div className="space-y-2">
+                            {mergingGroup.map(m => (
+                                <label key={m.id} className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-colors ${keepMemberId === m.id ? 'border-[#2696D2] bg-[#E8F4FC]' : 'border-gray-100'}`}>
+                                    <input type="radio" name="keepMember" checked={keepMemberId === m.id} onChange={() => setKeepMemberId(m.id)}
+                                        className="w-4 h-4 accent-[#2696D2] cursor-pointer" />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-[#111111]">{m.full_name}</p>
+                                        <p className="text-xs text-[#6E6E6E]">
+                                            {m.member_type} · {m.email || 'sin correo'} · {getAttendancesByMember(m.id).length} asistencias
+                                        </p>
+                                    </div>
+                                </label>
+                            ))}
+                        </div>
+                        <div className="flex items-start gap-2.5 bg-[#FADBD8] text-sm text-[#111111] px-4 py-3 rounded-xl">
+                            <AlertTriangle className="w-4 h-4 text-[#E74C3C] flex-shrink-0 mt-0.5" />
+                            <span>Esta acción no se puede deshacer.</span>
+                        </div>
+                    </div>
+                )}
+                <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+                    <button onClick={() => setMergingGroup(null)} className="px-5 py-2.5 rounded-xl border-2 border-gray-200 text-[#6E6E6E] font-medium text-sm hover:bg-gray-50 cursor-pointer">Cancelar</button>
+                    <button onClick={handleConfirmMerge}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-medium text-sm hover:shadow-lg cursor-pointer"
+                        style={{ background: '#E8A838' }}>
+                        <Merge className="w-4 h-4" /> Unificar
                     </button>
                 </div>
             </Modal>

@@ -172,6 +172,30 @@ export function getMemberByEmail(email) {
     return MEMBERS.find(m => m.email && m.email.toLowerCase() === email.toLowerCase()) || null
 }
 
+// Nombre "normalizado" para comparar duplicados: minúsculas, sin tildes/ñ
+// especial y sin espacios de más — así "Hans Dassé" y "Hans Dasse" quedan
+// iguales aunque estén escritos distinto.
+function normalizeNameForDuplicates(name) {
+    return (name || '')
+        .toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '') // quita tildes
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+// Agrupa a los miembros activos cuyo nombre normalizado coincide — para que
+// el administrador pueda revisarlos y unificarlos con mergeMembers().
+export function getPossibleDuplicateMembers() {
+    const groups = {}
+    MEMBERS.filter(m => m.is_active !== false).forEach(m => {
+        const key = normalizeNameForDuplicates(m.full_name)
+        if (!key) return
+        if (!groups[key]) groups[key] = []
+        groups[key].push(m)
+    })
+    return Object.values(groups).filter(group => group.length > 1)
+}
+
 function memberDocRef(id) { return doc(db, 'members', id) }
 
 // Aplica un cambio parcial a un miembro: actualiza la caché local al instante
@@ -285,6 +309,82 @@ export function deleteMember(id) {
     linkedUsers.forEach(u => updateDoc(userDocRef(u.id), { member_id: null }).catch(err => console.error('No se pudo desvincular el usuario', err)))
 
     return true
+}
+
+// Junta dos fichas duplicadas de la misma persona en una sola. "keepId" es
+// la que sobrevive; "mergeId" es la que desaparece. Todo lo que apuntaba al
+// duplicado (asistencias, cuenta de usuario, notas de perfil, inscripciones
+// a Escuela/Refugios) se traspasa a la ficha que se conserva en vez de
+// perderse, y los campos vacíos de la ficha que se conserva se completan con
+// los del duplicado. Si ambas fichas ya tienen asistencia al mismo servicio,
+// se descarta la del duplicado (no se puede estar dos veces en lo mismo).
+export function mergeMembers(keepId, mergeId) {
+    const keep = getMemberById(keepId)
+    const merge = getMemberById(mergeId)
+    if (!keep || !merge || keepId === mergeId) return { error: 'No se pudo identificar a los dos miembros' }
+
+    // 1. Asistencias: se traspasan, salvo choque con un servicio ya asistido.
+    const keepServiceIds = new Set(getAttendancesByMember(keepId).map(a => a.service_id))
+    getAttendancesByMember(mergeId).forEach(a => {
+        if (keepServiceIds.has(a.service_id)) {
+            cancelAttendance(a.id)
+        } else {
+            ATTENDANCES = ATTENDANCES.map(x => (x.id === a.id ? { ...x, member_id: keepId } : x))
+            updateDoc(attendanceDocRef(a.id), { member_id: keepId }).catch(err => console.error('No se pudo traspasar una asistencia', err))
+        }
+    })
+
+    // 2. Cuenta de usuario vinculada: solo se traspasa si la que se conserva
+    // no tiene ya una propia (no se puede tener dos cuentas apuntando igual).
+    const keepHasUser = USERS.some(u => u.member_id === keepId)
+    if (!keepHasUser) {
+        const linkedUser = USERS.find(u => u.member_id === mergeId)
+        if (linkedUser) {
+            USERS = USERS.map(u => (u.id === linkedUser.id ? { ...u, member_id: keepId } : u))
+            updateDoc(userDocRef(linkedUser.id), { member_id: keepId }).catch(err => console.error('No se pudo traspasar la cuenta de usuario', err))
+        }
+    }
+
+    // 3. Notas de perfil: se traspasan todas a la ficha que se conserva.
+    PROFILE_NOTES.forEach((note, i) => {
+        if (note.member_id === mergeId) {
+            PROFILE_NOTES[i] = { ...note, member_id: keepId }
+            updateDoc(doc(db, 'profileNotes', note.id), { member_id: keepId }).catch(err => console.error('No se pudo traspasar una nota', err))
+        }
+    })
+
+    // 4. Escuela del Discípulo y Refugios: solo se traspasa la inscripción si
+    // la ficha que se conserva no tenía ya una propia.
+    if (!ESCUELA_ENROLLMENTS.some(e => e.member_id === keepId)) {
+        const enrollment = ESCUELA_ENROLLMENTS.find(e => e.member_id === mergeId)
+        if (enrollment) enrollment.member_id = keepId
+    }
+    ESCUELA_ATTENDANCES.forEach(a => { if (a.member_id === mergeId) a.member_id = keepId })
+    if (!REFUGIO_ENROLLMENTS.some(e => e.member_id === keepId)) {
+        const enrollment = REFUGIO_ENROLLMENTS.find(e => e.member_id === mergeId)
+        if (enrollment) enrollment.member_id = keepId
+    }
+
+    // 5. Completa los campos vacíos de la ficha que se conserva con los del
+    // duplicado, y une (OR) las banderas de ministerio de ambos.
+    const patch = {}
+    ;['email', 'phone', 'birth_date', 'gender', 'civil_status', 'photo_url', 'buena_tierra_class'].forEach(field => {
+        if (!keep[field] && merge[field]) patch[field] = merge[field]
+    })
+    OPERATIONAL_GROUPS.forEach(g => {
+        if (merge[g.field] && !keep[g.field]) patch[g.field] = true
+    })
+    if (Object.keys(patch).length > 0) updateMember(keepId, patch)
+
+    // 6. Borra la ficha duplicada (ya no le queda nada apuntando a ella).
+    MEMBERS = MEMBERS.filter(m => m.id !== mergeId)
+    deleteDoc(memberDocRef(mergeId)).catch(err => console.error('No se pudo eliminar el duplicado', err))
+    if (MEMBER_PROFILES[mergeId]) {
+        delete MEMBER_PROFILES[mergeId]
+        deleteDoc(doc(db, 'memberProfiles', mergeId)).catch(() => {})
+    }
+
+    return { data: getMemberById(keepId) }
 }
 
 export function getServices() { return [...SERVICES] }
