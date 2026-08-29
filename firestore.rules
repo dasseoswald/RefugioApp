@@ -49,6 +49,22 @@ service cloud.firestore {
         && myRoleDoc().member_id == get(/databases/$(database)/documents/buenaTierraSettings/main).data.leader_member_id;
     }
 
+    // ---------- Ofrenda de ministerio (registro interno de cada líder) ----------
+    // scopeKey: 'grupo:<campo>' (Jóvenes/Damas/etc, el campo booleano del
+    // miembro en OPERATIONAL_GROUPS), o 'buena-tierra:<classId>'. Escuela del
+    // Discípulo no tiene líder propio todavía, así que su ofrenda queda
+    // reservada a isStaff() (ver más abajo, cubierto sin entrar a esta función).
+    function canManageMinistryOffering(scopeKey) {
+      return isStaff() || (
+        isMiembro() && myRoleDoc().member_id != null && (
+          (scopeKey.split(':')[0] == 'grupo'
+            && get(/databases/$(database)/documents/members/$(myRoleDoc().member_id)).data.member_type == 'Líder'
+            && get(/databases/$(database)/documents/members/$(myRoleDoc().member_id)).data[scopeKey.split(':')[1]] == true) ||
+          (scopeKey.split(':')[0] == 'buena-tierra' && isBuenaTierraTeacherOf(scopeKey.split(':')[1]))
+        )
+      );
+    }
+
     // ---------- Finanzas: confidencial, solo Tesorero (ni admin) ----------
     match /offerings/{docId} {
       allow read, write: if hasRole('tesorero');
@@ -183,6 +199,14 @@ service cloud.firestore {
       allow write: if hasRole('admin');
     }
 
+    // ---------- Ofrenda de ministerio (registro interno, no confidencial) ----------
+    match /ministryOfferings/{docId} {
+      allow read: if isMiembro();
+      allow create: if isMiembro() && canManageMinistryOffering(request.resource.data.scope_key);
+      allow delete: if isMiembro() && canManageMinistryOffering(resource.data.scope_key);
+      allow update: if false;
+    }
+
     // ---------- Eventos (incluye cadenas de oración/ayuno) ----------
     // Crear un evento: staff o líder de cualquier ministerio. Editar/borrar:
     // staff, o el propio líder que lo creó (created_by_uid == su uid).
@@ -212,7 +236,7 @@ service cloud.firestore {
     // aprobado (no cualquier cuenta de Google autenticada).
     match /{collection}/{docId} {
       allow read, write: if isMiembro()
-        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'events', 'eventRegistrations', 'eventChainSignups']);
+        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings']);
     }
   }
 }

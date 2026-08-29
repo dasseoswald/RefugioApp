@@ -654,6 +654,36 @@ export const deleteRadioMessage = radioChat.delete
 export const clearRadioMessages = radioChat.clearAll
 export const sendRadioMessage = radioChat.send
 
+// ---- Ofrendas de ministerio (registro interno, independiente de Finanzas) ----
+// scopeKey identifica dónde se registró: 'grupo:<field>' (Jóvenes, Damas,
+// Caballeros, etc.), 'buena-tierra:<classId>' o 'escuela:<level>'. Es un
+// cuaderno de control que lleva cada líder para su propio ministerio — NO
+// alimenta ni reemplaza los registros confidenciales de ofrendas/diezmos
+// del Tesorero (colecciones offerings/tithes, ver firestore.rules).
+export function subscribeMinistryOfferings(scopeKey, callback) {
+    const q = query(collection(db, 'ministryOfferings'), where('scope_key', '==', scopeKey), orderBy('date', 'desc'))
+    return onSnapshot(q, (snap) => {
+        callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    }, (err) => console.error('Error sincronizando la ofrenda del ministerio', err))
+}
+
+export function addMinistryOffering(scopeKey, { amount, date, notes, registered_by, registered_by_uid }) {
+    const ref = doc(collection(db, 'ministryOfferings'))
+    return setDoc(ref, {
+        scope_key: scopeKey,
+        amount: Number(amount) || 0,
+        date,
+        notes: notes || '',
+        registered_by: registered_by || 'Sistema',
+        registered_by_uid: registered_by_uid || null,
+        created_at: new Date().toISOString(),
+    }).catch(err => console.error('No se pudo guardar la ofrenda', err))
+}
+
+export function deleteMinistryOffering(id) {
+    return deleteDoc(doc(db, 'ministryOfferings', id)).catch(err => console.error('No se pudo borrar la ofrenda', err))
+}
+
 // ---- Biblia colaborativa (destacar y comentar versículos) ----
 // Se consulta solo el capítulo que se está leyendo (no toda la Biblia de una
 // vez) para que esto siga siendo liviano sin importar cuánto crezca el uso.

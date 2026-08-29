@@ -8,6 +8,7 @@ import {
     subscribeBuenaTierraSettings, setBuenaTierraLeader,
 } from '../../data/mockData.js'
 import MemberAutocomplete from '../../components/shared/MemberAutocomplete.jsx'
+import OfferingLog from '../../components/shared/OfferingLog.jsx'
 import {
     Sprout, UserPlus, Check, Settings, Crown, ChevronDown, ChevronUp,
     Power, PowerOff, X, Users, Lock, Unlock,
@@ -240,6 +241,8 @@ export default function BuenaTierraPage() {
                                             </div>
                                         </div>
                                     )}
+
+                                    <OfferingLog scopeKey={`buena-tierra:${classId}`} canManage={canManage} color="#13CD68" />
 
                                     {!canManage ? (
                                         <p className="text-sm text-[#6E6E6E]">Solo el maestro, ayudante o líder de esta clase puede tomar asistencia.</p>

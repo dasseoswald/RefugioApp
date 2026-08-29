@@ -8,6 +8,7 @@ import {
 } from '../../data/mockData.js'
 import Modal from '../../components/ui/Modal.jsx'
 import MemberEscuelaSummaryModal from '../../components/admin/MemberEscuelaSummaryModal.jsx'
+import OfferingLog from '../../components/shared/OfferingLog.jsx'
 import {
     BookOpen, Users, UserPlus, UserMinus, Search, CheckCircle2,
     Calendar, Clock, GraduationCap, Plus, Check, X, ChevronDown, ChevronUp, Layers,
@@ -337,6 +338,8 @@ export default function EscuelaDiscipuloPage() {
                     })
                 )}
             </div>
+
+            <OfferingLog scopeKey={`escuela:${activeLevel}`} canManage={true} color={levelConf.color} />
 
             {/* Enrolled members */}
             <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] overflow-hidden">

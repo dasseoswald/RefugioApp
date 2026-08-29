@@ -10,11 +10,12 @@ import {
     getSetlistForService, addSongToSetlist, removeSongFromSetlist, setSetlistPerformer
 } from '../../data/mockData.js'
 import { transposeChordChart, transposeKeyLabel, keyDifference, detectFirstChordRoot, KEY_OPTIONS } from '../../lib/chordTranspose.js'
+import OfferingLog from '../../components/shared/OfferingLog.jsx'
 import {
     Users, Megaphone, MessageCircle, Image, Send,
     CheckCircle2, UserPlus, UserMinus, Search,
     Paperclip, X, BookOpen, Sprout, UserCircle, UserSquare, Baby, Music, Home, Calendar,
-    ListMusic, Plus, Trash2, MinusCircle, PlusCircle, ChevronLeft, Edit2, Check
+    ListMusic, Plus, Trash2, MinusCircle, PlusCircle, ChevronLeft, Edit2, Check, HandCoins
 } from 'lucide-react'
 
 const ICONS_MAP = { BookOpen, Sprout, Users, UserCircle, UserSquare, Baby, Music, Home }
@@ -112,6 +113,12 @@ export default function GroupDashboardPage() {
                     }`}>
                     <MessageCircle className="w-4 h-4" /> Chat
                 </button>
+                <button onClick={() => setActiveTab('offering')}
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap ${
+                        activeTab === 'offering' ? 'border-[#2696D2] text-[#111111]' : 'border-transparent text-[#6E6E6E] hover:text-[#111111]'
+                    }`}>
+                    <HandCoins className="w-4 h-4" /> Ofrenda
+                </button>
                 {group.id === 'alabanza' && (
                     <button onClick={() => setActiveTab('calendar')}
                         className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap ${
@@ -134,6 +141,7 @@ export default function GroupDashboardPage() {
             {activeTab === 'members' && <MembersTab group={group} color={color} gradient={gradient} canManage={canManageMembers} />}
             {activeTab === 'notices' && <NoticesTab group={group} myProfile={myMemberProfile || user} canPublish={canPublishNotices} color={color} />}
             {activeTab === 'chat' && <ChatTab group={group} myProfile={myMemberProfile || user} canChat={canChat} color={color} />}
+            {activeTab === 'offering' && <OfferingLog scopeKey={`grupo:${group.field}`} canManage={isLeader} color={color === '#111111' ? '#E8A838' : color} />}
             {activeTab === 'calendar' && group.id === 'alabanza' && <CalendarTab group={group} canManage={canPublishNotices} color={color} gradient={gradient} />}
             {activeTab === 'repertoire' && group.id === 'alabanza' && <RepertoireTab group={group} canManage={canPublishNotices} color={color} />}
         </div>
