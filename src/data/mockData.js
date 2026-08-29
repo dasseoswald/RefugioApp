@@ -654,6 +654,24 @@ export const deleteRadioMessage = radioChat.delete
 export const clearRadioMessages = radioChat.clearAll
 export const sendRadioMessage = radioChat.send
 
+// ---- Líder asignado por ministerio (Jóvenes, Damas, etc.) ----
+// Se guarda por el campo booleano del grupo (OPERATIONAL_GROUPS.field, ej.
+// 'grupo_jovenes') para poder resolverlo con la misma clave que usa el
+// registro de ofrenda (ver ministryOfferings más abajo y firestore.rules).
+// Es ADITIVO al criterio anterior (member_type === 'Líder' + estar en el
+// grupo) — un administrador puede además asignar explícitamente a alguien
+// como el líder de ese ministerio en particular.
+export function subscribeGroupSettings(field, callback) {
+    return onSnapshot(doc(db, 'groupSettings', field), (snap) => {
+        callback(snap.exists() ? snap.data() : { leader_member_id: null })
+    }, (err) => console.error('Error sincronizando el líder del ministerio', err))
+}
+
+export function setGroupLeader(field, memberId) {
+    return setDoc(doc(db, 'groupSettings', field), { leader_member_id: memberId }, { merge: true })
+        .catch(err => console.error('No se pudo asignar el líder del ministerio', err))
+}
+
 // ---- Ofrendas de ministerio (registro interno, independiente de Finanzas) ----
 // scopeKey identifica dónde se registró: 'grupo:<field>' (Jóvenes, Damas,
 // Caballeros, etc.), 'buena-tierra:<classId>' o 'escuela:<level>'. Es un

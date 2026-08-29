@@ -49,6 +49,26 @@ service cloud.firestore {
         && myRoleDoc().member_id == get(/databases/$(database)/documents/buenaTierraSettings/main).data.leader_member_id;
     }
 
+    // ---------- Líder asignado por ministerio (Jóvenes, Damas, etc.) ----------
+    // Guardado por el campo booleano del grupo (ej. 'grupo_jovenes'), que es
+    // la misma clave que ya usa el scope_key de ofrenda ('grupo:<campo>') —
+    // así ambas cosas comparten un único lugar de verdad. Es aditivo al
+    // criterio anterior (member_type == 'Líder' + estar en el grupo): un
+    // administrador puede además asignar explícitamente al líder de un
+    // ministerio en particular.
+    function isAssignedGroupLeader(field) {
+      return isMiembro() && exists(/databases/$(database)/documents/groupSettings/$(field))
+        && myRoleDoc().member_id == get(/databases/$(database)/documents/groupSettings/$(field)).data.leader_member_id;
+    }
+
+    function isGroupLeader(field) {
+      return isMiembro() && myRoleDoc().member_id != null && (
+        (get(/databases/$(database)/documents/members/$(myRoleDoc().member_id)).data.member_type == 'Líder'
+          && get(/databases/$(database)/documents/members/$(myRoleDoc().member_id)).data[field] == true)
+        || isAssignedGroupLeader(field)
+      );
+    }
+
     // ---------- Ofrenda de ministerio (registro interno de cada líder) ----------
     // scopeKey: 'grupo:<campo>' (Jóvenes/Damas/etc, el campo booleano del
     // miembro en OPERATIONAL_GROUPS), o 'buena-tierra:<classId>'. Escuela del
@@ -56,12 +76,8 @@ service cloud.firestore {
     // reservada a isStaff() (ver más abajo, cubierto sin entrar a esta función).
     function canManageMinistryOffering(scopeKey) {
       return isStaff() || (
-        isMiembro() && myRoleDoc().member_id != null && (
-          (scopeKey.split(':')[0] == 'grupo'
-            && get(/databases/$(database)/documents/members/$(myRoleDoc().member_id)).data.member_type == 'Líder'
-            && get(/databases/$(database)/documents/members/$(myRoleDoc().member_id)).data[scopeKey.split(':')[1]] == true) ||
-          (scopeKey.split(':')[0] == 'buena-tierra' && isBuenaTierraTeacherOf(scopeKey.split(':')[1]))
-        )
+        (scopeKey.split(':')[0] == 'grupo' && isGroupLeader(scopeKey.split(':')[1])) ||
+        (scopeKey.split(':')[0] == 'buena-tierra' && isBuenaTierraTeacherOf(scopeKey.split(':')[1]))
       );
     }
 
@@ -198,6 +214,12 @@ service cloud.firestore {
       allow read: if isMiembro();
       allow write: if hasRole('admin');
     }
+    // Líder asignado por ministerio (Jóvenes, Damas, etc.) — solo un admin
+    // puede asignarlo/cambiarlo.
+    match /groupSettings/{field} {
+      allow read: if isMiembro();
+      allow write: if hasRole('admin');
+    }
 
     // ---------- Ofrenda de ministerio (registro interno, no confidencial) ----------
     match /ministryOfferings/{docId} {
@@ -236,7 +258,7 @@ service cloud.firestore {
     // aprobado (no cualquier cuenta de Google autenticada).
     match /{collection}/{docId} {
       allow read, write: if isMiembro()
-        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings']);
+        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'groupSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings']);
     }
   }
 }

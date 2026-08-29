@@ -7,15 +7,18 @@ import {
     getGroupMessages, sendGroupMessage,
     getUpcomingAlabanzaOccasions, ALABANZA_ROLES, getAlabanzaAssignmentsForService, setAlabanzaAssignment,
     getAlabanzaSongs, createAlabanzaSong, updateAlabanzaSong, deleteAlabanzaSong,
-    getSetlistForService, addSongToSetlist, removeSongFromSetlist, setSetlistPerformer
+    getSetlistForService, addSongToSetlist, removeSongFromSetlist, setSetlistPerformer,
+    subscribeGroupSettings, setGroupLeader,
 } from '../../data/mockData.js'
 import { transposeChordChart, transposeKeyLabel, keyDifference, detectFirstChordRoot, KEY_OPTIONS } from '../../lib/chordTranspose.js'
 import OfferingLog from '../../components/shared/OfferingLog.jsx'
+import MemberAutocomplete from '../../components/shared/MemberAutocomplete.jsx'
 import {
     Users, Megaphone, MessageCircle, Image, Send,
     CheckCircle2, UserPlus, UserMinus, Search,
     Paperclip, X, BookOpen, Sprout, UserCircle, UserSquare, Baby, Music, Home, Calendar,
-    ListMusic, Plus, Trash2, MinusCircle, PlusCircle, ChevronLeft, Edit2, Check, HandCoins
+    ListMusic, Plus, Trash2, MinusCircle, PlusCircle, ChevronLeft, Edit2, Check, HandCoins,
+    Crown, Settings, ChevronDown, ChevronUp,
 } from 'lucide-react'
 
 const ICONS_MAP = { BookOpen, Sprout, Users, UserCircle, UserSquare, Baby, Music, Home }
@@ -33,7 +36,12 @@ export default function GroupDashboardPage() {
     const [isLeader, setIsLeader] = useState(false)
     const [isMember, setIsMember] = useState(false)
     const [myMemberProfile, setMyMemberProfile] = useState(null)
-    
+    // Líder asignado a mano por un admin (aditivo al criterio anterior de
+    // member_type === 'Líder' + estar en el grupo) — ver setGroupLeader.
+    const [groupSettings, setGroupSettingsState] = useState({ leader_member_id: null })
+    const [showLeaderSettings, setShowLeaderSettings] = useState(false)
+    const [leaderInput, setLeaderInput] = useState('')
+
     useEffect(() => {
         const foundGroup = OPERATIONAL_GROUPS.find(g => g.id === groupId)
         if (!foundGroup) {
@@ -41,24 +49,37 @@ export default function GroupDashboardPage() {
             return
         }
         setGroup(foundGroup)
-        
+
         const allMembers = getMembers()
         const myProfile = user?.member_id ? allMembers.find(m => m.id === user.member_id) : null
         setMyMemberProfile(myProfile)
-        
+
         const adminStatus = user?.role === 'admin'
         const memberStatus = myProfile ? myProfile[foundGroup.field] === true : false
-        const leaderStatus = memberStatus && myProfile?.member_type === 'Líder'
-        
+
         setIsAdmin(adminStatus)
         setIsMember(memberStatus || adminStatus) // admin counts as member for viewing purposes
-        setIsLeader(leaderStatus || adminStatus) // admin counts as leader for publishing
-        
+
         if (!adminStatus && !memberStatus) {
             // Acceso denegado si no es del grupo
             navigate('/login')
         }
     }, [groupId, user, navigate])
+
+    useEffect(() => {
+        if (!group) return
+        const unsubscribe = subscribeGroupSettings(group.field, setGroupSettingsState)
+        return unsubscribe
+    }, [group])
+
+    useEffect(() => {
+        if (!group) return
+        const adminStatus = user?.role === 'admin'
+        const memberStatus = myMemberProfile ? myMemberProfile[group.field] === true : false
+        const isAssignedLeader = !!myMemberProfile && myMemberProfile.id === groupSettings.leader_member_id
+        const leaderStatus = memberStatus && (myMemberProfile?.member_type === 'Líder' || isAssignedLeader)
+        setIsLeader(leaderStatus || adminStatus) // admin counts as leader for publishing
+    }, [group, user, myMemberProfile, groupSettings])
 
     if (!group) return <div className="p-8 text-center text-gray-500">Cargando ministerio...</div>
     if (!isMember) return <div className="p-8 text-center text-red-500">Acceso Denegado</div>
@@ -66,6 +87,17 @@ export default function GroupDashboardPage() {
     const canManageMembers = isAdmin
     const canPublishNotices = isLeader
     const canChat = isMember
+
+    const allMembersForLeaderPicker = getMembers()
+    const currentLeaderName = groupSettings.leader_member_id
+        ? allMembersForLeaderPicker.find(m => m.id === groupSettings.leader_member_id)?.full_name
+        : null
+
+    const handleSetLeader = (member) => {
+        if (!member || !group) return
+        setGroupLeader(group.field, member.id)
+        setLeaderInput('')
+    }
 
     const GroupIcon = ICONS_MAP[group.icon] || Users
 
@@ -88,10 +120,38 @@ export default function GroupDashboardPage() {
                     </div>
                     <div>
                         <h1 className="text-2xl font-bold">{group.name}</h1>
-                        <p className="text-white/70 text-sm mt-1">Dashboard y comunicación interna</p>
+                        <p className="text-white/70 text-sm mt-1">
+                            Dashboard y comunicación interna
+                            {currentLeaderName && ` · Líder: ${currentLeaderName}`}
+                        </p>
                     </div>
                 </div>
             </div>
+
+            {isAdmin && (
+                <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] overflow-hidden">
+                    <button onClick={() => setShowLeaderSettings(s => !s)}
+                        className="w-full flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-gray-50/50 transition-colors">
+                        <span className="flex items-center gap-2 text-sm font-semibold text-[#111111]">
+                            <Settings className="w-4 h-4 text-[#6E6E6E]" /> Asignar líder del ministerio
+                        </span>
+                        {showLeaderSettings ? <ChevronUp className="w-4 h-4 text-[#6E6E6E]" /> : <ChevronDown className="w-4 h-4 text-[#6E6E6E]" />}
+                    </button>
+                    {showLeaderSettings && (
+                        <div className="px-6 pb-6 border-t border-gray-100 pt-4">
+                            <label className="block text-xs font-medium text-[#6E6E6E] mb-1.5 flex items-center gap-1.5">
+                                <Crown className="w-3.5 h-3.5" /> Líder de {group.name}
+                            </label>
+                            {currentLeaderName && <p className="text-sm text-[#111111] mb-2">Actual: <strong>{currentLeaderName}</strong></p>}
+                            <MemberAutocomplete value={leaderInput} onChange={setLeaderInput} onSelectMember={handleSetLeader}
+                                placeholder="Buscar miembro para asignar como líder..." className="max-w-sm" />
+                            <p className="text-xs text-[#6E6E6E] mt-2">
+                                No reemplaza a quienes ya son líderes por tener el tipo de miembro "Líder" — solo agrega a esta persona como líder de este ministerio en particular.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Tabs */}
             <div className="flex items-center gap-2 border-b border-gray-200 overflow-x-auto">
