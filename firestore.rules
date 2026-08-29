@@ -166,7 +166,9 @@ service cloud.firestore {
     // esté designado como líder principal de Buena Tierra.
     match /buenaTierraClasses/{classId} {
       allow read: if isMiembro();
-      allow write: if hasRole('admin') || isBuenaTierraLeader();
+      // El maestro/ayudante de la clase también puede escribir (tema, cita
+      // y rango de edad son contenido semanal suyo, no solo del líder/admin).
+      allow write: if hasRole('admin') || isBuenaTierraLeader() || isBuenaTierraTeacherOf(classId);
     }
     match /buenaTierraSettings/{docId} {
       allow read: if isMiembro();

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import {
-    getActiveService, createService, updateService, toggleServiceActive,
+    getActiveService, createService, toggleServiceActive,
     getMembers, createMember, registerAttendance, cancelAttendance, findAttendanceByMemberAndService,
     subscribeBuenaTierraClasses, updateBuenaTierraClass,
     subscribeBuenaTierraSettings, setBuenaTierraLeader,
@@ -23,8 +23,6 @@ export default function BuenaTierraPage() {
     const [members, setMembers] = useState([])
     const [classes, setClasses] = useState([])
     const [settings, setSettings] = useState({ leader_member_id: null })
-    const [theme, setTheme] = useState('')
-    const [mainVerse, setMainVerse] = useState('')
     const [openClass, setOpenClass] = useState(null)
     const [newChild, setNewChild] = useState({ classId: null, name: '', lastName: '', age: '' })
     const [showSettings, setShowSettings] = useState(false)
@@ -42,11 +40,6 @@ export default function BuenaTierraPage() {
         const unsubSettings = subscribeBuenaTierraSettings(setSettings)
         return () => { unsubClasses(); unsubSettings() }
     }, [])
-
-    useEffect(() => {
-        setTheme(service?.theme || '')
-        setMainVerse(service?.main_verse || '')
-    }, [service?.id])
 
     const myMemberId = user?.member_id || null
     const isLeader = !!myMemberId && settings.leader_member_id === myMemberId
@@ -79,11 +72,6 @@ export default function BuenaTierraPage() {
         })
         toggleServiceActive(svc.id)
         setTimeout(refresh, 300)
-    }
-
-    const saveThemeAndVerse = () => {
-        if (!service) return
-        updateService(service.id, { theme, main_verse: mainVerse })
     }
 
     const toggleAttendance = (member) => {
@@ -168,20 +156,6 @@ export default function BuenaTierraPage() {
                 </div>
             </div>
 
-            {service?.is_active && (
-                <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] p-6 space-y-3">
-                    <h3 className="text-sm font-semibold text-[#111111]">Tema y cita de hoy</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <input type="text" value={theme} onChange={(e) => setTheme(e.target.value)} onBlur={saveThemeAndVerse}
-                            placeholder="Tema asociado" disabled={!canAssignStaff && !CLASS_ORDER.some(canManageClass)}
-                            className="px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 text-sm focus:outline-none focus:border-[#13CD68]" />
-                        <input type="text" value={mainVerse} onChange={(e) => setMainVerse(e.target.value)} onBlur={saveThemeAndVerse}
-                            placeholder="Cita principal (ej: Juan 3:16)" disabled={!canAssignStaff && !CLASS_ORDER.some(canManageClass)}
-                            className="px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 text-sm focus:outline-none focus:border-[#13CD68]" />
-                    </div>
-                </div>
-            )}
-
             <div className="space-y-4">
                 {CLASS_ORDER.map(classId => {
                     const cls = classById(classId)
@@ -219,6 +193,22 @@ export default function BuenaTierraPage() {
                                                 onBlur={(e) => updateBuenaTierraClass(classId, { age_range: e.target.value })}
                                                 placeholder="Ej: 4 a 6 años"
                                                 className="w-full max-w-xs px-4 py-2 rounded-xl border-2 border-gray-100 bg-gray-50/50 text-sm focus:outline-none focus:border-[#13CD68]" />
+                                        </div>
+                                    )}
+
+                                    {canManage && (
+                                        <div>
+                                            <label className="block text-xs font-medium text-[#6E6E6E] mb-1.5">Tema y cita de hoy (de esta clase)</label>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <input type="text" key={`${classId}-theme`} defaultValue={cls.theme}
+                                                    onBlur={(e) => updateBuenaTierraClass(classId, { theme: e.target.value })}
+                                                    placeholder="Tema asociado"
+                                                    className="px-4 py-2 rounded-xl border-2 border-gray-100 bg-gray-50/50 text-sm focus:outline-none focus:border-[#13CD68]" />
+                                                <input type="text" key={`${classId}-verse`} defaultValue={cls.main_verse}
+                                                    onBlur={(e) => updateBuenaTierraClass(classId, { main_verse: e.target.value })}
+                                                    placeholder="Cita principal (ej: Juan 3:16)"
+                                                    className="px-4 py-2 rounded-xl border-2 border-gray-100 bg-gray-50/50 text-sm focus:outline-none focus:border-[#13CD68]" />
+                                            </div>
                                         </div>
                                     )}
 
