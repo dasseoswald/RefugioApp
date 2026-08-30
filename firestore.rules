@@ -253,12 +253,22 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // ---------- Calendario de actividades ----------
+    // Mismo criterio que Eventos: cualquier líder de ministerio (o el
+    // equipo) puede agregar una actividad; editar/borrar solo staff o quien
+    // la creó.
+    match /activities/{docId} {
+      allow read: if isMiembro();
+      allow create: if isStaff() || (isMinistryLeader() && request.resource.data.created_by_uid == request.auth.uid);
+      allow update, delete: if isStaff() || (isMinistryLeader() && resource.data.created_by_uid == request.auth.uid);
+    }
+
     // ---------- Resto de colecciones ----------
     // memberProfiles, services, foro, anuncios, etc.: cualquier miembro
     // aprobado (no cualquier cuenta de Google autenticada).
     match /{collection}/{docId} {
       allow read, write: if isMiembro()
-        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'groupSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings']);
+        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'groupSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings', 'activities']);
     }
   }
 }

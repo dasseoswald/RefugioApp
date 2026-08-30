@@ -23,6 +23,7 @@ import NuevosPage from './pages/bienvenida/NuevosPage.jsx'
 import BroadcastPage from './pages/admin/BroadcastPage.jsx'
 import PrayerRequestsPage from './pages/shared/PrayerRequestsPage.jsx'
 import EventsPage from './pages/shared/EventsPage.jsx'
+import CalendarioPage from './pages/shared/CalendarioPage.jsx'
 import LiveChatPage from './pages/shared/LiveChatPage.jsx'
 import RadioPage from './pages/shared/RadioPage.jsx'
 import BibliaPage from './pages/shared/BibliaPage.jsx'
@@ -263,6 +264,11 @@ export default function App() {
             <Route path="/:role/eventos" element={
                 <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero', 'bienvenida']}>
                     <AppLayout><EventsPage /></AppLayout>
+                </ProtectedRoute>
+            } />
+            <Route path="/:role/calendario" element={
+                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero', 'bienvenida']}>
+                    <AppLayout><CalendarioPage /></AppLayout>
                 </ProtectedRoute>
             } />
             <Route path="/:role/chat" element={

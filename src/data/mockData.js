@@ -2068,6 +2068,76 @@ export function cancelChainSlotSignup(eventId, slotKey, memberId) {
     return true
 }
 
+// ---- Calendario de actividades ----
+// Slide compartido donde cualquier líder de ministerio (o el equipo) puede
+// agregar una actividad — distinto de "Eventos" (que tiene afiche, cupos,
+// pago e inscripción): esto es solo fecha, hora, lugar y una descripción
+// corta, pensado para que se vea de un vistazo qué hay agendado cada mes.
+let ACTIVITIES = []
+let activityListeners = []
+let activitiesSyncStarted = false
+let activitiesLoaded = false
+
+function notifyActivityListeners() { activityListeners.forEach(fn => fn()) }
+export function isActivitiesLoaded() { return activitiesLoaded }
+
+function startActivitiesSync() {
+    if (activitiesSyncStarted) return
+    activitiesSyncStarted = true
+    onSnapshot(collection(db, 'activities'), (snap) => {
+        ACTIVITIES = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        activitiesLoaded = true
+        notifyActivityListeners()
+    }, (err) => { console.error('Error sincronizando el calendario de actividades', err); activitiesLoaded = true; notifyActivityListeners() })
+}
+
+export function subscribeActivities(callback) {
+    activityListeners.push(callback)
+    startActivitiesSync()
+    return () => { activityListeners = activityListeners.filter(fn => fn !== callback) }
+}
+
+export function getActivities() {
+    return [...ACTIVITIES].sort((a, b) => `${a.date}${a.starts_at || ''}`.localeCompare(`${b.date}${b.starts_at || ''}`))
+}
+
+export function createActivity(data) {
+    const id = `activity-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    const activity = {
+        title: data.title,
+        description: data.description || '',
+        date: data.date,
+        starts_at: data.starts_at || '',
+        ends_at: data.ends_at || '',
+        location: data.location || '',
+        group_id: data.group_id || null,
+        created_by: data.created_by || null,
+        created_by_uid: data.created_by_uid || null,
+        created_at: new Date().toISOString(),
+    }
+    ACTIVITIES = [...ACTIVITIES, { id, ...activity }]
+    setDoc(doc(db, 'activities', id), activity).catch(err => console.error('No se pudo guardar la actividad', err))
+    notifyActivityListeners()
+    return { id, ...activity }
+}
+
+export function updateActivity(id, data) {
+    const idx = ACTIVITIES.findIndex(a => a.id === id)
+    if (idx === -1) return null
+    const updated = { ...ACTIVITIES[idx], ...data }
+    ACTIVITIES = ACTIVITIES.map((a, i) => (i === idx ? updated : a))
+    const { id: _id, ...rest } = updated
+    updateDoc(doc(db, 'activities', id), rest).catch(err => console.error('No se pudo actualizar la actividad', err))
+    notifyActivityListeners()
+    return updated
+}
+
+export function deleteActivity(id) {
+    ACTIVITIES = ACTIVITIES.filter(a => a.id !== id)
+    deleteDoc(doc(db, 'activities', id)).catch(err => console.error('No se pudo eliminar la actividad', err))
+    notifyActivityListeners()
+}
+
 // ---- Anuncios (Presentación en vivo) ----
 // Anuncios de eventos recurrentes de la iglesia (jueves, escuela del
 // discípulo, jóvenes, etc.) que se proyectan a pantalla completa junto con

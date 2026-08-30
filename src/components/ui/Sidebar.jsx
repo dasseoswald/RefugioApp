@@ -10,7 +10,8 @@ import {
     CalendarDays, LogOut, Shield,
     UserCheck, BookOpen, Sprout, ChevronDown, ChevronRight,
     UserCircle, UserSquare, Baby, Music, Layers, Megaphone, HandHeart, PartyPopper,
-    Menu, X, MessageCircle, Radio, Share2, Check, Facebook, Instagram, Landmark, MessageCircleQuestion, Projector
+    Menu, X, MessageCircle, Radio, Share2, Check, Facebook, Instagram, Landmark, MessageCircleQuestion, Projector,
+    CalendarRange,
 } from 'lucide-react'
 
 const INSTAGRAM_URL = 'https://www.instagram.com/unrefugioparalafamilia/'
@@ -36,6 +37,7 @@ const NAV_CONFIG = {
         { to: '/admin/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
         { to: '/presentacion', icon: Projector, label: 'Presentación' },
         { to: '/admin/eventos', icon: PartyPopper, label: 'Eventos' },
+        { to: '/admin/calendario', icon: CalendarRange, label: 'Calendario' },
         { to: '/admin/chat', icon: MessageCircle, label: 'Chat en Vivo' },
         { to: '/admin/foro', icon: MessageCircleQuestion, label: 'Foro' },
         { to: '/admin/biblia', icon: BookOpen, label: 'Biblia' },
@@ -49,6 +51,7 @@ const NAV_CONFIG = {
         { to: '/controller/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
         { to: '/presentacion', icon: Projector, label: 'Presentación' },
         { to: '/controller/eventos', icon: PartyPopper, label: 'Eventos' },
+        { to: '/controller/calendario', icon: CalendarRange, label: 'Calendario' },
         { to: '/controller/chat', icon: MessageCircle, label: 'Chat en Vivo' },
         { to: '/controller/foro', icon: MessageCircleQuestion, label: 'Foro' },
         { to: '/controller/biblia', icon: BookOpen, label: 'Biblia' },
@@ -58,6 +61,7 @@ const NAV_CONFIG = {
         { to: '/attendee', icon: Home, label: 'Mi Asistencia', end: true },
         { to: '/attendee/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
         { to: '/attendee/eventos', icon: PartyPopper, label: 'Eventos' },
+        { to: '/attendee/calendario', icon: CalendarRange, label: 'Calendario' },
         { to: '/attendee/chat', icon: MessageCircle, label: 'Chat en Vivo' },
         { to: '/attendee/foro', icon: MessageCircleQuestion, label: 'Foro' },
         { to: '/attendee/biblia', icon: BookOpen, label: 'Biblia' },
@@ -67,6 +71,7 @@ const NAV_CONFIG = {
         { to: '/tesorero', icon: Landmark, label: 'Finanzas', end: true },
         { to: '/tesorero/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
         { to: '/tesorero/eventos', icon: PartyPopper, label: 'Eventos' },
+        { to: '/tesorero/calendario', icon: CalendarRange, label: 'Calendario' },
         { to: '/tesorero/chat', icon: MessageCircle, label: 'Chat en Vivo' },
         { to: '/tesorero/foro', icon: MessageCircleQuestion, label: 'Foro' },
         { to: '/tesorero/biblia', icon: BookOpen, label: 'Biblia' },
@@ -76,6 +81,7 @@ const NAV_CONFIG = {
         { to: '/bienvenida', icon: UserCheck, label: 'Nuevos', end: true },
         { to: '/bienvenida/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
         { to: '/bienvenida/eventos', icon: PartyPopper, label: 'Eventos' },
+        { to: '/bienvenida/calendario', icon: CalendarRange, label: 'Calendario' },
         { to: '/bienvenida/chat', icon: MessageCircle, label: 'Chat en Vivo' },
         { to: '/bienvenida/foro', icon: MessageCircleQuestion, label: 'Foro' },
         { to: '/bienvenida/biblia', icon: BookOpen, label: 'Biblia' },
