@@ -172,28 +172,48 @@ export function getMemberByEmail(email) {
     return MEMBERS.find(m => m.email && m.email.toLowerCase() === email.toLowerCase()) || null
 }
 
-// Nombre "normalizado" para comparar duplicados: minúsculas, sin tildes/ñ
-// especial y sin espacios de más — así "Hans Dassé" y "Hans Dasse" quedan
-// iguales aunque estén escritos distinto.
+// Nombre "normalizado" para comparar duplicados: minúsculas, sin tildes,
+// sin guiones bajos/números/puntuación (típico de un apodo tipo "vale_") y
+// sin espacios de más — así "Hans Dassé" y "Hans Dasse" quedan iguales, y
+// "vale_ Fuentealba" queda como "vale fuentealba".
 function normalizeNameForDuplicates(name) {
     return (name || '')
         .toLowerCase()
         .normalize('NFD').replace(/[̀-ͯ]/g, '') // quita tildes
+        .replace(/[^a-z\s]/g, ' ') // quita guiones bajos, números, puntuación
         .replace(/\s+/g, ' ')
         .trim()
 }
 
+// ¿"word" es el mismo nombre que "target", o un apodo/abreviación de él?
+// Ej: wordMatches('vale', 'valentina') → true (prefijo de al menos 3
+// letras); wordMatches('ana', 'anais') → true. No compara al revés (que el
+// nombre CORTO esté contenido en el largo, nunca al contrario) para no
+// disparar con cualquier coincidencia parcial.
+function wordMatches(word, target) {
+    if (word === target) return true
+    return word.length >= 3 && target.startsWith(word)
+}
+
 // Agrupa a los miembros activos que probablemente sean la misma persona:
-// nombre normalizado idéntico ("Hans Dassé" / "Hans Dasse"), o uno de los
-// dos quedó registrado solo con el nombre de pila (típico de un alta rápida
-// como visitante, ej. "Dayris" vs "Dayris Aguilera Espinoza") — para que el
-// administrador los revise y los unifique con mergeMembers(). Como siempre
-// hay revisión humana antes de unificar, se prefiere mostrar de más a
-// mostrar de menos.
+// nombre normalizado idéntico ("Hans Dassé" / "Hans Dasse"), uno de los dos
+// quedó registrado solo con el nombre de pila ("Dayris" vs "Dayris Aguilera
+// Espinoza"), o con un apodo/abreviación ("vale_ Fuentealba" vs "Valentina
+// Fuentealba Tapia") — para que el administrador los revise y los unifique
+// con mergeMembers(). Como siempre hay revisión humana antes de unificar, se
+// prefiere mostrar de más a mostrar de menos.
 export function getPossibleDuplicateMembers() {
     const active = MEMBERS.filter(m => m.is_active !== false && (m.full_name || '').trim())
     const used = new Set()
     const groups = []
+
+    const sameName = (wordsShort, wordsLong) => {
+        if (wordsShort.length === 0) return false
+        // Cada palabra del nombre más corto debe reconocerse en el más
+        // largo (exacta o como apodo) — así ambos apellidos/nombres tienen
+        // que calzar, no basta con que coincida uno solo por casualidad.
+        return wordsShort.every(w => wordsLong.some(t => wordMatches(w, t)))
+    }
 
     for (let i = 0; i < active.length; i++) {
         if (used.has(active[i].id)) continue
@@ -205,13 +225,8 @@ export function getPossibleDuplicateMembers() {
             if (used.has(active[j].id)) continue
             const b = active[j]
             const wordsB = normalizeNameForDuplicates(b.full_name).split(' ').filter(Boolean)
-            const isExactMatch = wordsA.join(' ') === wordsB.join(' ')
             const [shorter, longer] = wordsA.length <= wordsB.length ? [wordsA, wordsB] : [wordsB, wordsA]
-            // Solo cuando el nombre corto es UNA sola palabra (nombre de
-            // pila nada más) y esa palabra aparece en el nombre largo —
-            // evita que dos apellidos en común disparen un falso positivo.
-            const isNameContained = shorter.length === 1 && longer.includes(shorter[0])
-            if (isExactMatch || isNameContained) matches.push(b)
+            if (sameName(shorter, longer)) matches.push(b)
         }
 
         if (matches.length > 1) {
