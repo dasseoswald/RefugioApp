@@ -183,17 +183,44 @@ function normalizeNameForDuplicates(name) {
         .trim()
 }
 
-// Agrupa a los miembros activos cuyo nombre normalizado coincide — para que
-// el administrador pueda revisarlos y unificarlos con mergeMembers().
+// Agrupa a los miembros activos que probablemente sean la misma persona:
+// nombre normalizado idéntico ("Hans Dassé" / "Hans Dasse"), o uno de los
+// dos quedó registrado solo con el nombre de pila (típico de un alta rápida
+// como visitante, ej. "Dayris" vs "Dayris Aguilera Espinoza") — para que el
+// administrador los revise y los unifique con mergeMembers(). Como siempre
+// hay revisión humana antes de unificar, se prefiere mostrar de más a
+// mostrar de menos.
 export function getPossibleDuplicateMembers() {
-    const groups = {}
-    MEMBERS.filter(m => m.is_active !== false).forEach(m => {
-        const key = normalizeNameForDuplicates(m.full_name)
-        if (!key) return
-        if (!groups[key]) groups[key] = []
-        groups[key].push(m)
-    })
-    return Object.values(groups).filter(group => group.length > 1)
+    const active = MEMBERS.filter(m => m.is_active !== false && (m.full_name || '').trim())
+    const used = new Set()
+    const groups = []
+
+    for (let i = 0; i < active.length; i++) {
+        if (used.has(active[i].id)) continue
+        const a = active[i]
+        const wordsA = normalizeNameForDuplicates(a.full_name).split(' ').filter(Boolean)
+        const matches = [a]
+
+        for (let j = i + 1; j < active.length; j++) {
+            if (used.has(active[j].id)) continue
+            const b = active[j]
+            const wordsB = normalizeNameForDuplicates(b.full_name).split(' ').filter(Boolean)
+            const isExactMatch = wordsA.join(' ') === wordsB.join(' ')
+            const [shorter, longer] = wordsA.length <= wordsB.length ? [wordsA, wordsB] : [wordsB, wordsA]
+            // Solo cuando el nombre corto es UNA sola palabra (nombre de
+            // pila nada más) y esa palabra aparece en el nombre largo —
+            // evita que dos apellidos en común disparen un falso positivo.
+            const isNameContained = shorter.length === 1 && longer.includes(shorter[0])
+            if (isExactMatch || isNameContained) matches.push(b)
+        }
+
+        if (matches.length > 1) {
+            matches.forEach(m => used.add(m.id))
+            groups.push(matches)
+        }
+    }
+
+    return groups
 }
 
 function memberDocRef(id) { return doc(db, 'members', id) }
