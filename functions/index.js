@@ -155,8 +155,6 @@ const GROUP_FIELDS = {
     'buena-tierra': 'buena_tierra',
     'jovenes': 'grupo_jovenes',
     'damas': 'grupo_damas',
-    'caballeros': 'grupo_caballeros',
-    'ninos': 'grupo_ninos',
     'alabanza': 'grupo_alabanza',
     'refugios': 'grupo_refugios',
 }

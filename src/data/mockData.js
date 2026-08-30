@@ -33,8 +33,6 @@ export const OPERATIONAL_GROUPS = [
     { id: 'buena-tierra', name: 'Buena Tierra', field: 'buena_tierra', icon: 'Sprout' },
     { id: 'jovenes', name: 'Jóvenes', field: 'grupo_jovenes', icon: 'Users' },
     { id: 'damas', name: 'Damas', field: 'grupo_damas', icon: 'UserCircle' },
-    { id: 'caballeros', name: 'Caballeros', field: 'grupo_caballeros', icon: 'UserSquare' },
-    { id: 'ninos', name: 'Niños', field: 'grupo_ninos', icon: 'Baby' },
     { id: 'alabanza', name: 'Alabanza / Música', field: 'grupo_alabanza', icon: 'Music' },
     { id: 'refugios', name: 'Refugios', field: 'grupo_refugios', icon: 'Home' },
 ]
@@ -176,10 +174,25 @@ export function getMemberByEmail(email) {
 // sin guiones bajos/números/puntuación (típico de un apodo tipo "vale_") y
 // sin espacios de más — así "Hans Dassé" y "Hans Dasse" quedan iguales, y
 // "vale_ Fuentealba" queda como "vale fuentealba".
+// Quita las marcas diacríticas combinantes que deja normalize('NFD') sobre
+// una vocal con tilde (rango Unicode 0x0300-0x036F), comparando por CÓDIGO
+// numérico en vez de con un literal dentro de un regex — un literal ahí es
+// frágil (un editor puede "arreglar" el acento sin querer y romper el rango
+// en silencio). Eso fue justo lo que pasó antes: al no reconocerse la marca
+// aquí, el siguiente paso de limpieza la trataba como puntuación y la
+// reemplazaba por un espacio, partiendo la palabra en dos
+// (ej. "hernández" → "herna ndez", que ya no calzaba con "hernandez").
+function stripDiacritics(str) {
+    let result = ''
+    for (const ch of str) {
+        const code = ch.codePointAt(0)
+        if (code < 0x0300 || code > 0x036f) result += ch
+    }
+    return result
+}
+
 function normalizeNameForDuplicates(name) {
-    return (name || '')
-        .toLowerCase()
-        .normalize('NFD').replace(/[̀-ͯ]/g, '') // quita tildes
+    return stripDiacritics((name || '').toLowerCase().normalize('NFD'))
         .replace(/[^a-z\s]/g, ' ') // quita guiones bajos, números, puntuación
         .replace(/\s+/g, ' ')
         .trim()
