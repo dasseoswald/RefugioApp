@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { getServices, getAttendancesByService, getMembers, getMemberById } from '../../data/mockData.js'
-import { BarChart3, Download, FileText, Table, Filter, CalendarDays, Users, TrendingUp, TrendingDown, Minus, UserX } from 'lucide-react'
+import { getServices, getAttendancesByService, getMembers, getMemberById, getMembersWithConsecutiveAbsences } from '../../data/mockData.js'
+import { BarChart3, Download, FileText, Table, Filter, CalendarDays, Users, TrendingUp, TrendingDown, Minus, UserX, Clock } from 'lucide-react'
 import jsPDF from 'jspdf'
 import 'jspdf-autotable'
 import * as XLSX from 'xlsx'
@@ -15,11 +15,13 @@ export default function ReportsPage() {
     const [reportData, setReportData] = useState([])
     const [filterType, setFilterType] = useState('')
     const [activeMembers, setActiveMembers] = useState([])
+    const [absenceBuckets, setAbsenceBuckets] = useState({ 2: [], 3: [], 4: [] })
 
     useEffect(() => {
         const allServices = getServices()
         setServices(allServices)
         setActiveMembers(getMembers().filter(m => m.is_active))
+        setAbsenceBuckets(getMembersWithConsecutiveAbsences())
         if (allServices.length > 0) {
             setSelectedServiceId(allServices[0].id)
         }
@@ -226,6 +228,49 @@ export default function ReportsPage() {
                     )}
                 </div>
             )}
+
+            {/* Inasistencias seguidas */}
+            <div className="space-y-3">
+                <h2 className="text-lg font-semibold text-[#111111] flex items-center gap-2">
+                    <UserX className="w-5 h-5 text-[#E74C3C]" /> Inasistencias Seguidas
+                </h2>
+                <p className="text-sm text-[#6E6E6E] -mt-2">Miembros que llevan varios cultos seguidos sin asistir (domingo o jueves), para darles seguimiento antes de que se alejen.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {[2, 3, 4].map(n => {
+                        const list = absenceBuckets[n] || []
+                        const meta = n === 2
+                            ? { label: '2 seguidas', color: '#E8A838', bg: '#FFF3CD' }
+                            : n === 3
+                                ? { label: '3 seguidas', color: '#E67E22', bg: '#FCE4CC' }
+                                : { label: '4 o más seguidas', color: '#E74C3C', bg: '#FADBD8' }
+                        return (
+                            <div key={n} className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] overflow-hidden">
+                                <div className="px-4 py-3 flex items-center justify-between" style={{ background: meta.bg }}>
+                                    <span className="text-sm font-semibold" style={{ color: meta.color }}>{meta.label}</span>
+                                    <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ background: meta.color }}>{list.length}</span>
+                                </div>
+                                <div className="p-3 space-y-2 max-h-64 overflow-y-auto">
+                                    {list.length === 0 ? (
+                                        <p className="text-xs text-[#6E6E6E] px-2 py-4 text-center">Nadie en esta etapa</p>
+                                    ) : (
+                                        list.map(({ member, lastAttendedDate }) => (
+                                            <div key={member.id} className="px-3 py-2.5 rounded-xl bg-gray-50">
+                                                <p className="text-sm font-medium text-[#111111] flex items-center gap-1.5">
+                                                    <UserX className="w-3.5 h-3.5 flex-shrink-0" style={{ color: meta.color }} />
+                                                    {member.full_name}
+                                                </p>
+                                                <p className="text-xs text-[#6E6E6E] mt-1 flex items-center gap-1.5">
+                                                    <Clock className="w-3 h-3" /> Última vez: {formatDate(lastAttendedDate)}
+                                                </p>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
 
             {/* Summary */}
             <h2 className="text-lg font-semibold text-[#111111] flex items-center gap-2">

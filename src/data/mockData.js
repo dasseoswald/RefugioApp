@@ -650,6 +650,46 @@ export function getVisitorsByCheckCount() {
     return buckets
 }
 
+// Miembros (no visitantes) que llevan 2, 3 o 4+ cultos regulares (domingo o
+// jueves) SEGUIDOS sin asistir — para que el equipo pueda ir a buscar a
+// quien se está alejando, antes de que se pierda del todo. Solo se cuentan
+// los cultos desde la primera vez que la persona asistió alguna vez (así no
+// se le cuentan en contra cultos de antes de que existiera como miembro
+// activo); quien nunca ha asistido no aparece acá — ese es un caso distinto
+// (ver getVisitorsByCheckCount).
+export function getMembersWithConsecutiveAbsences() {
+    const regularServices = getServices()
+        .filter(s => (s.service_type || 'sunday') !== 'buena-tierra')
+        .sort((a, b) => new Date(b.service_date) - new Date(a.service_date)) // más reciente primero
+
+    const buckets = { 2: [], 3: [], 4: [] }
+
+    MEMBERS
+        .filter(m => m.is_active !== false && m.member_type !== 'Visitante')
+        .forEach(member => {
+            const attendedServiceIds = new Set(getAttendancesByMember(member.id).map(a => a.service_id))
+            const attendedServices = regularServices.filter(s => attendedServiceIds.has(s.id))
+            if (attendedServices.length === 0) return // nunca ha asistido, no corresponde a este reporte
+
+            const firstAttendedDate = attendedServices[attendedServices.length - 1].service_date
+            const relevantServices = regularServices.filter(s => s.service_date >= firstAttendedDate)
+
+            let streak = 0
+            for (const service of relevantServices) {
+                if (attendedServiceIds.has(service.id)) break
+                streak++
+            }
+
+            if (streak >= 2) {
+                const bucket = Math.min(streak, 4)
+                buckets[bucket].push({ member, streak, lastAttendedDate: attendedServices[0].service_date })
+            }
+        })
+
+    Object.values(buckets).forEach(list => list.sort((a, b) => b.streak - a.streak))
+    return buckets
+}
+
 // ---- Buena Tierra: clases por edad, líder y maestros/ayudantes ----
 // Las 3 clases (paz/alegria/faith) son documentos fijos, sembrados una sola
 // vez — ver seedBuenaTierraClasses más abajo. El rango de edad lo puede
