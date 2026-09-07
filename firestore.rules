@@ -69,6 +69,16 @@ service cloud.firestore {
       );
     }
 
+    // ---------- Matriz de permisos (editable por el admin desde Usuarios) ----------
+    // Solo cubre los permisos que NO son un límite de seguridad fijo (ver el
+    // comentario en src/pages/admin/UsersPage.jsx sobre cuáles quedan
+    // bloqueadas). Admin siempre los tiene, Asistente nunca — este documento
+    // solo decide si Controlador/Tesorero/Bienvenida también los tienen.
+    function hasDynamicPermission(permissionKey) {
+      return isMiembro() && exists(/databases/$(database)/documents/settings/rolePermissions)
+        && get(/databases/$(database)/documents/settings/rolePermissions).data.get(permissionKey, {}).get(myRoleDoc().role, false) == true;
+    }
+
     // ---------- Ofrenda de ministerio (registro interno de cada líder) ----------
     // scopeKey: 'grupo:<campo>' (Jóvenes/Damas/etc, el campo booleano del
     // miembro en OPERATIONAL_GROUPS), o 'buena-tierra:<classId>'. Escuela del
@@ -134,9 +144,10 @@ service cloud.firestore {
       allow read: if isMiembro();
       // Alta abierta: necesaria para que el registro de una cuenta nueva
       // pueda crear su propio miembro. La modificación de miembros
-      // existentes queda reservada al equipo (admin/controlador).
+      // existentes queda reservada al equipo (admin/controlador), o a quien
+      // la matriz de permisos le haya activado "Gestión de miembros".
       allow create: if isSignedIn();
-      allow update, delete: if isStaff();
+      allow update, delete: if isStaff() || hasDynamicPermission('manage_members');
     }
 
     // ---------- Asistencia ----------
@@ -150,6 +161,7 @@ service cloud.firestore {
       allow create: if isSignedIn() && (
         isStaff() ||
         request.resource.data.member_id == myRoleDoc().member_id ||
+        hasDynamicPermission('register_others_attendance') ||
         // Un maestro/ayudante de Buena Tierra puede registrar la asistencia
         // de los niños de SU clase (no de cualquier miembro).
         (isMiembro()
@@ -253,6 +265,22 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // ---------- Servicios (cultos) ----------
+    // Antes caía en el catch-all abierto (cualquier isMiembro() podía
+    // escribir) — se cierra a staff o a quien tenga "Gestionar servicios"
+    // activado en la matriz de permisos.
+    match /services/{docId} {
+      allow read: if isMiembro();
+      allow write: if isStaff() || hasDynamicPermission('manage_services');
+    }
+
+    // ---------- Configuración (matriz de permisos, etc.) ----------
+    // Mismo criterio que asignar roles: solo un administrador cambia esto.
+    match /settings/{docId} {
+      allow read: if isMiembro();
+      allow write: if hasRole('admin');
+    }
+
     // ---------- Calendario de actividades ----------
     // Mismo criterio que Eventos: cualquier líder de ministerio (o el
     // equipo) puede agregar una actividad; editar/borrar solo staff o quien
@@ -268,7 +296,7 @@ service cloud.firestore {
     // aprobado (no cualquier cuenta de Google autenticada).
     match /{collection}/{docId} {
       allow read, write: if isMiembro()
-        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'groupSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings', 'activities']);
+        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'groupSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings', 'activities', 'services', 'settings']);
     }
   }
 }

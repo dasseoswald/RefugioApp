@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useAuth } from '../../context/AuthContext.jsx'
 import { getServices, getAttendancesByService, getMembers, getMemberById, getMembersWithConsecutiveAbsences } from '../../data/mockData.js'
+import { useRolePermissions, hasDynamicPermission } from '../../hooks/useRolePermissions.js'
 import { BarChart3, Download, FileText, Table, Filter, CalendarDays, Users, TrendingUp, TrendingDown, Minus, UserX, Clock } from 'lucide-react'
 import jsPDF from 'jspdf'
 import 'jspdf-autotable'
@@ -10,6 +12,12 @@ import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip, Lege
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
 
 export default function ReportsPage() {
+    const { user } = useAuth()
+    const rolePermissions = useRolePermissions()
+    // Admin/Controlador ya podían exportar (llegan aquí solo si pueden ver
+    // reportes); Tesorero/Bienvenida necesitan además "Exportar PDF/Excel"
+    // activado en la matriz — ver reportes no implica poder exportar.
+    const canExport = user?.role === 'admin' || user?.role === 'controller' || hasDynamicPermission(rolePermissions, user?.role, 'export_reports')
     const [services, setServices] = useState([])
     const [selectedServiceId, setSelectedServiceId] = useState('')
     const [reportData, setReportData] = useState([])
@@ -131,18 +139,20 @@ export default function ReportsPage() {
                     <h1 className="text-2xl font-bold text-[#111111]">Reportes de Asistencia</h1>
                     <p className="text-[#6E6E6E] mt-1">Generar y exportar reportes del sistema</p>
                 </div>
-                <div className="flex gap-2">
-                    <button onClick={exportToPDF}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white font-medium text-sm transition-all hover:shadow-lg cursor-pointer"
-                        style={{ background: 'linear-gradient(135deg, #E74C3C, #C0392B)' }}>
-                        <FileText className="w-4 h-4" /> PDF
-                    </button>
-                    <button onClick={exportToExcel}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white font-medium text-sm transition-all hover:shadow-lg cursor-pointer"
-                        style={{ background: 'linear-gradient(135deg, #13CD68, #0FA855)' }}>
-                        <Table className="w-4 h-4" /> Excel
-                    </button>
-                </div>
+                {canExport && (
+                    <div className="flex gap-2">
+                        <button onClick={exportToPDF}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white font-medium text-sm transition-all hover:shadow-lg cursor-pointer"
+                            style={{ background: 'linear-gradient(135deg, #E74C3C, #C0392B)' }}>
+                            <FileText className="w-4 h-4" /> PDF
+                        </button>
+                        <button onClick={exportToExcel}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white font-medium text-sm transition-all hover:shadow-lg cursor-pointer"
+                            style={{ background: 'linear-gradient(135deg, #13CD68, #0FA855)' }}>
+                            <Table className="w-4 h-4" /> Excel
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Filters */}

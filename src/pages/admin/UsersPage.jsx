@@ -1,13 +1,36 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { getUsers, getMembers, createUser, updateUserProfile, isUserOnline } from '../../data/mockData.js'
+import { getUsers, getMembers, createUser, updateUserProfile, isUserOnline, setRolePermission } from '../../data/mockData.js'
 import { functions } from '../../firebase.js'
 import { httpsCallable } from 'firebase/functions'
 import UserAvatar from '../../components/ui/UserAvatar.jsx'
 import Modal from '../../components/ui/Modal.jsx'
-import { Shield, UserPlus, Edit2, Mail, UserCheck, CheckCircle2, Landmark } from 'lucide-react'
+import { useRolePermissions } from '../../hooks/useRolePermissions.js'
+import { Shield, UserPlus, Edit2, Mail, UserCheck, CheckCircle2, Landmark, Lock } from 'lucide-react'
 
 const EMPTY_FORM = { name: '', email: '', role: 'attendee', member_id: '' }
+
+// Filas fijas: son un límite de seguridad real (ver plan de "Matriz de
+// Permisos editable") y no se pueden reasignar desde la matriz.
+const FIXED_PERMISSIONS = [
+    ['Registrar propia asistencia', true, true, true, true, true],
+    ['Gestionar usuarios', false, false, true, false, false],
+    ['Crear otro Administrador', false, false, true, false, false],
+    ['Enviar mensajes a todos los grupos', false, false, true, false, false],
+    ['Ver ofrendas y diezmos (confidencial)', false, false, false, true, false],
+    ['Ver panel de Nuevos y notificación a la 4ª visita', false, false, true, false, true],
+]
+
+// Filas editables: Admin decide si Controlador, Tesorero y/o Bienvenida
+// también las tienen. Admin siempre las tiene, Asistente nunca.
+const EDITABLE_PERMISSIONS = [
+    { label: 'Registrar asistencia de terceros', key: 'register_others_attendance' },
+    { label: 'Gestión de miembros', key: 'manage_members' },
+    { label: 'Ver reportes', key: 'view_reports' },
+    { label: 'Exportar PDF/Excel', key: 'export_reports' },
+    { label: 'Gestionar servicios', key: 'manage_services' },
+    { label: 'Configurar sistema', key: 'configure_system' },
+]
 
 export default function UsersPage() {
     const { user: currentUser, confirmPassword } = useAuth()
@@ -22,6 +45,7 @@ export default function UsersPage() {
     const [confirmPasswordValue, setConfirmPasswordValue] = useState('')
     const [confirmError, setConfirmError] = useState('')
     const [confirming, setConfirming] = useState(false)
+    const rolePermissions = useRolePermissions()
 
     useEffect(() => {
         refreshData()
@@ -253,27 +277,38 @@ export default function UsersPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white">
-                            {[
-                                ['Registrar propia asistencia', true, true, true, true, true],
-                                ['Registrar asistencia de terceros', false, true, true, false, false],
-                                ['Gestión de miembros', false, true, true, false, false],
-                                ['Ver reportes', false, true, true, false, false],
-                                ['Exportar PDF/Excel', false, true, true, false, false],
-                                ['Gestionar servicios', false, false, true, false, false],
-                                ['Gestionar usuarios', false, false, true, false, false],
-                                ['Crear otro Administrador', false, false, true, false, false],
-                                ['Enviar mensajes a todos los grupos', false, false, true, false, false],
-                                ['Configurar sistema', false, false, true, false, false],
-                                ['Ver ofrendas y diezmos (confidencial)', false, false, false, true, false],
-                                ['Ver panel de Nuevos y notificación a la 4ª visita', false, false, true, false, true],
-                            ].map(([perm, att, ctrl, admin, tesorero, bienvenida]) => (
+                            {FIXED_PERMISSIONS.map(([perm, att, ctrl, admin, tesorero, bienvenida]) => (
                                 <tr key={perm} className="hover:bg-white/60 transition-colors">
-                                    <td className="px-4 py-2.5 text-[#111111] font-medium">{perm}</td>
+                                    <td className="px-4 py-2.5 text-[#111111] font-medium flex items-center gap-1.5">
+                                        <Lock className="w-3 h-3 text-[#6E6E6E] flex-shrink-0" title="Permiso fijo por seguridad, no editable" />
+                                        {perm}
+                                    </td>
                                     <td className="text-center px-4 py-2.5">{att ? '✅' : '❌'}</td>
                                     <td className="text-center px-4 py-2.5">{ctrl ? '✅' : '❌'}</td>
                                     <td className="text-center px-4 py-2.5">{admin ? '✅' : '❌'}</td>
                                     <td className="text-center px-4 py-2.5">{tesorero ? '✅' : '❌'}</td>
                                     <td className="text-center px-4 py-2.5">{bienvenida ? '✅' : '❌'}</td>
+                                </tr>
+                            ))}
+                            {EDITABLE_PERMISSIONS.map(({ label, key }) => (
+                                <tr key={key} className="hover:bg-white/60 transition-colors">
+                                    <td className="px-4 py-2.5 text-[#111111] font-medium">{label}</td>
+                                    <td className="text-center px-4 py-2.5">❌</td>
+                                    {['controller', 'admin', 'tesorero', 'bienvenida'].map(role => (
+                                        role === 'admin' ? (
+                                            <td key={role} className="text-center px-4 py-2.5">✅</td>
+                                        ) : (
+                                            <td key={role} className="text-center px-4 py-2.5">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={!!rolePermissions?.[key]?.[role]}
+                                                    onChange={(e) => setRolePermission(key, role, e.target.checked)}
+                                                    className="w-4 h-4 cursor-pointer accent-[#2696D2]"
+                                                    title={`Dar/quitar este permiso a ${roleConfig[role].label}`}
+                                                />
+                                            </td>
+                                        )
+                                    ))}
                                 </tr>
                             ))}
                         </tbody>

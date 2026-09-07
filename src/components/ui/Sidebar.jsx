@@ -2,6 +2,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { OPERATIONAL_GROUPS, getMemberById } from '../../data/mockData.js'
+import { useRolePermissions, hasDynamicPermission } from '../../hooks/useRolePermissions.js'
 import { shareApp } from '../../lib/shareApp.js'
 import UserAvatar from './UserAvatar.jsx'
 import logo from '../../assets/logo.png'
@@ -69,6 +70,9 @@ const NAV_CONFIG = {
     ],
     tesorero: [
         { to: '/tesorero', icon: Landmark, label: 'Finanzas', end: true },
+        { to: '/tesorero/services', icon: CalendarDays, label: 'Servicios', permissionKey: 'manage_services' },
+        { to: '/tesorero/members', icon: Users, label: 'Miembros', permissionKey: 'manage_members' },
+        { to: '/tesorero/reports', icon: BarChart3, label: 'Reportes', permissionKey: 'view_reports' },
         { to: '/tesorero/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
         { to: '/tesorero/eventos', icon: PartyPopper, label: 'Eventos' },
         { to: '/tesorero/calendario', icon: CalendarRange, label: 'Calendario' },
@@ -79,6 +83,9 @@ const NAV_CONFIG = {
     ],
     bienvenida: [
         { to: '/bienvenida', icon: UserCheck, label: 'Nuevos', end: true },
+        { to: '/bienvenida/services', icon: CalendarDays, label: 'Servicios', permissionKey: 'manage_services' },
+        { to: '/bienvenida/members', icon: Users, label: 'Miembros', permissionKey: 'manage_members' },
+        { to: '/bienvenida/reports', icon: BarChart3, label: 'Reportes', permissionKey: 'view_reports' },
         { to: '/bienvenida/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
         { to: '/bienvenida/eventos', icon: PartyPopper, label: 'Eventos' },
         { to: '/bienvenida/calendario', icon: CalendarRange, label: 'Calendario' },
@@ -101,7 +108,9 @@ export default function Sidebar() {
     const { user, logout } = useAuth()
     const navigate = useNavigate()
     const location = useLocation()
-    const navItems = NAV_CONFIG[user?.role] || []
+    const rolePermissions = useRolePermissions()
+    const navItems = (NAV_CONFIG[user?.role] || [])
+        .filter(item => !item.permissionKey || hasDynamicPermission(rolePermissions, user?.role, item.permissionKey))
     const profileRoute = PROFILE_ROUTES[user?.role] || '/login'
     const isProfileActive = location.pathname === profileRoute
     const [groupsOpen, setGroupsOpen] = useState(true)

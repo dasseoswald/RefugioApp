@@ -1122,6 +1122,25 @@ export function updateSystemSettings(data) {
     return { ...SYSTEM_SETTINGS }
 }
 
+// ---- Matriz de permisos (editable por el admin) ----
+// Cubre solo los permisos de la tabla que NO son un límite de seguridad
+// fijo (ver firestore.rules: hasDynamicPermission y los comentarios en cada
+// regla que la usa). Admin siempre tiene estos permisos y Asistente nunca
+// los tiene — este documento solo decide si Controlador/Tesorero/Bienvenida
+// también los tienen.
+function rolePermissionsDocRef() { return doc(db, 'settings', 'rolePermissions') }
+
+export function subscribeRolePermissions(callback) {
+    return onSnapshot(rolePermissionsDocRef(), (snap) => {
+        callback(snap.exists() ? snap.data() : {})
+    }, (err) => console.error('Error sincronizando la matriz de permisos', err))
+}
+
+export function setRolePermission(permissionKey, role, value) {
+    return setDoc(rolePermissionsDocRef(), { [permissionKey]: { [role]: value } }, { merge: true })
+        .catch(err => console.error('No se pudo actualizar el permiso', err))
+}
+
 export function getAttendanceStats() {
     const activeService = getActiveService()
     const todayAttendances = getAttendancesByService(activeService.id)

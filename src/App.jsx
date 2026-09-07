@@ -138,17 +138,50 @@ export default function App() {
                 </ProtectedRoute>
             } />
             <Route path="/controller/services" element={
-                <ProtectedRoute allowedRoles={['controller']}>
+                <ProtectedRoute allowedRoles={['controller']} permissionKey="manage_services">
                     <AppLayout><ServicesPage /></AppLayout>
                 </ProtectedRoute>
             } />
             <Route path="/controller/members" element={
-                <ProtectedRoute allowedRoles={['controller']}>
+                <ProtectedRoute allowedRoles={['controller']} permissionKey="manage_members">
                     <AppLayout><MembersPage /></AppLayout>
                 </ProtectedRoute>
             } />
             <Route path="/controller/reports" element={
-                <ProtectedRoute allowedRoles={['controller']}>
+                <ProtectedRoute allowedRoles={['controller']} permissionKey="view_reports">
+                    <AppLayout><ReportsPage /></AppLayout>
+                </ProtectedRoute>
+            } />
+            {/* Rutas equivalentes para Tesorero/Bienvenida: solo entran si la
+                matriz de permisos les activó el permiso correspondiente
+                (ver ProtectedRoute.jsx permissionKey y Sidebar.jsx). */}
+            <Route path="/tesorero/services" element={
+                <ProtectedRoute permissionKey="manage_services">
+                    <AppLayout><ServicesPage /></AppLayout>
+                </ProtectedRoute>
+            } />
+            <Route path="/tesorero/members" element={
+                <ProtectedRoute permissionKey="manage_members">
+                    <AppLayout><MembersPage /></AppLayout>
+                </ProtectedRoute>
+            } />
+            <Route path="/tesorero/reports" element={
+                <ProtectedRoute permissionKey="view_reports">
+                    <AppLayout><ReportsPage /></AppLayout>
+                </ProtectedRoute>
+            } />
+            <Route path="/bienvenida/services" element={
+                <ProtectedRoute permissionKey="manage_services">
+                    <AppLayout><ServicesPage /></AppLayout>
+                </ProtectedRoute>
+            } />
+            <Route path="/bienvenida/members" element={
+                <ProtectedRoute permissionKey="manage_members">
+                    <AppLayout><MembersPage /></AppLayout>
+                </ProtectedRoute>
+            } />
+            <Route path="/bienvenida/reports" element={
+                <ProtectedRoute permissionKey="view_reports">
                     <AppLayout><ReportsPage /></AppLayout>
                 </ProtectedRoute>
             } />

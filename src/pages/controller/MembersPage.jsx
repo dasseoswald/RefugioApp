@@ -6,6 +6,7 @@ import {
     OPERATIONAL_GROUPS, WELCOME_CHECK_ACTIONS, getPossibleDuplicateMembers, mergeMembers,
 } from '../../data/mockData.js'
 import Modal from '../../components/ui/Modal.jsx'
+import { useRolePermissions, hasDynamicPermission } from '../../hooks/useRolePermissions.js'
 import { Search, UserPlus, Edit2, ToggleLeft, ToggleRight, Users, Filter, ChevronLeft, ChevronRight, FileUser, Home, X, CheckCircle2, Circle, Trash2, AlertTriangle, Merge } from 'lucide-react'
 
 const MEMBER_TYPES = ['Miembro Activo', 'Miembro Inactivo', 'Visitante', 'Servidor', 'Líder', 'Pastor']
@@ -13,9 +14,14 @@ const CIVIL_STATUSES = ['Soltero', 'Casado', 'Viudo', 'Divorciado']
 const GENDERS = ['M', 'F', 'Otro']
 const EMPTY_FORM = { full_name: '', birth_date: '', gender: 'M', civil_status: 'Soltero', member_type: 'Miembro Activo', phone: '', email: '', groups: [] }
 
-export default function MembersPage({ canToggleActive = false }) {
+export default function MembersPage({ canToggleActive: canToggleActiveProp = false }) {
     const navigate = useNavigate()
     const { user } = useAuth()
+    const rolePermissions = useRolePermissions()
+    // Admin siempre lo tiene (vía el prop en App.jsx); Controlador/Tesorero/
+    // Bienvenida lo obtienen si el admin les activó "Gestión de miembros"
+    // en la matriz de permisos (ver hasDynamicPermission en firestore.rules).
+    const canToggleActive = canToggleActiveProp || hasDynamicPermission(rolePermissions, user?.role, 'manage_members')
     const [members, setMembers] = useState([])
     const [searchTerm, setSearchTerm] = useState('')
     const [filterType, setFilterType] = useState('')
