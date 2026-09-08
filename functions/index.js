@@ -147,6 +147,11 @@ exports.activateUpcomingServices = onSchedule({ schedule: 'every day 06:00', tim
         batch.update(db.collection('services').doc(serviceId), { is_active: true })
         await batch.commit()
     }
+
+    // Se revisa todos los días (no solo cuando activamos un servicio nuevo)
+    // porque checkConsecutiveAbsences es idempotente: solo crea un aviso
+    // nuevo si el streak de alguien subió respecto del último aviso.
+    await checkConsecutiveAbsences().catch(err => console.error('checkConsecutiveAbsences falló', err))
 })
 
 // Debe coincidir con OPERATIONAL_GROUPS en src/data/mockData.js (id -> field).
@@ -195,6 +200,93 @@ async function sendPushToTokens(tokens, title, body, logPrefix) {
         })
         await batch.commit().catch(() => {})
     }
+}
+
+// ---- Aviso automático de inasistencias seguidas (para Admin y Bienvenida) ----
+// Misma lógica de streak que getMembersWithConsecutiveAbsences en
+// src/data/mockData.js (combina cultos domingo+jueves, ignora Buena Tierra,
+// cuenta desde la primera vez que la persona asistió alguna vez), pero acá
+// además: (a) solo mira a quienes YA pasaron las 4 seguidas (el reporte de
+// 2/3/4 vive solo en la pantalla de Reportes, este aviso es para el caso más
+// urgente), y (b) usa last_absence_alert_streak en el propio miembro para no
+// mandar el mismo aviso todos los días mientras el streak no aumente, y para
+// limpiarlo apenas la persona vuelve a asistir (streak vuelve a 0).
+async function checkConsecutiveAbsences() {
+    const servicesSnap = await db.collection('services').get()
+    const regularServices = servicesSnap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(s => (s.service_type || 'sunday') !== 'buena-tierra')
+        .sort((a, b) => new Date(b.service_date) - new Date(a.service_date))
+    if (regularServices.length === 0) return
+
+    const [membersSnap, attendancesSnap] = await Promise.all([
+        db.collection('members').get(),
+        db.collection('attendances').get(),
+    ])
+
+    const attendedByMember = new Map()
+    attendancesSnap.forEach(doc => {
+        const a = doc.data()
+        if (!a.member_id || !a.service_id) return
+        if (!attendedByMember.has(a.member_id)) attendedByMember.set(a.member_id, new Set())
+        attendedByMember.get(a.member_id).add(a.service_id)
+    })
+
+    const { FieldValue } = require('firebase-admin/firestore')
+    const batch = db.batch()
+    let writes = 0
+    const newlyFlagged = []
+
+    membersSnap.docs.forEach(memberDoc => {
+        const member = { id: memberDoc.id, ...memberDoc.data() }
+        if (member.is_active === false || member.member_type === 'Visitante') return
+
+        const attendedServiceIds = attendedByMember.get(member.id) || new Set()
+        const attendedServices = regularServices.filter(s => attendedServiceIds.has(s.id))
+        if (attendedServices.length === 0) return // nunca ha asistido, no corresponde
+
+        const firstAttendedDate = attendedServices[attendedServices.length - 1].service_date
+        const relevantServices = regularServices.filter(s => s.service_date >= firstAttendedDate)
+
+        let streak = 0
+        for (const service of relevantServices) {
+            if (attendedServiceIds.has(service.id)) break
+            streak++
+        }
+
+        const lastAlerted = member.last_absence_alert_streak || 0
+        if (streak > 4 && streak > lastAlerted) {
+            batch.update(memberDoc.ref, { last_absence_alert_streak: streak })
+            batch.set(db.collection('notifications').doc(), {
+                type: 'consecutive_absence',
+                title: 'Inasistencia prolongada',
+                body: `${member.full_name || 'Un miembro'} lleva ${streak} cultos seguidos sin asistir.`,
+                member_id: member.id,
+                target_roles: ['admin', 'bienvenida'],
+                read_by: [],
+                created_at: new Date().toISOString(),
+            })
+            newlyFlagged.push(member.full_name || 'Un miembro')
+            writes++
+        } else if (streak === 0 && lastAlerted > 0) {
+            batch.update(memberDoc.ref, { last_absence_alert_streak: FieldValue.delete() })
+            writes++
+        }
+    })
+
+    if (writes > 0) await batch.commit()
+    if (newlyFlagged.length === 0) return
+
+    const staffRolesSnap = await db.collection('userRoles').where('role', 'in', ['admin', 'bienvenida']).get()
+    const tokens = []
+    for (const uidsChunk of chunk(staffRolesSnap.docs.map(d => d.id), 10)) {
+        const usersSnap = await db.collection('users').where('auth_uid', 'in', uidsChunk).get()
+        usersSnap.forEach(u => tokens.push(...(u.data().fcm_tokens || [])))
+    }
+    const body = newlyFlagged.length === 1
+        ? `${newlyFlagged[0]} lleva más de 4 cultos seguidos sin asistir.`
+        : `${newlyFlagged.length} miembros llevan más de 4 cultos seguidos sin asistir.`
+    await sendPushToTokens(tokens, 'Inasistencia prolongada', body, 'checkConsecutiveAbsences')
 }
 
 // Roles con permiso para emitir avisos (que disparan notificaciones push a

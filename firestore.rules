@@ -281,6 +281,20 @@ service cloud.firestore {
       allow write: if hasRole('admin');
     }
 
+    // ---------- Notificaciones internas (campanita) ----------
+    // Se crean SOLO desde el Admin SDK (Cloud Functions, ej. inasistencias
+    // seguidas) — un cliente nunca puede crear ni borrar un aviso, solo
+    // marcarlo como leído agregando su propio uid a read_by, sin tocar nada
+    // más del documento ni el historial de lectura de otra persona.
+    match /notifications/{docId} {
+      allow read: if isMiembro() && resource.data.target_roles.hasAny([myRoleDoc().role]);
+      allow update: if isMiembro() && resource.data.target_roles.hasAny([myRoleDoc().role])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read_by'])
+        && request.resource.data.read_by.hasAll(resource.data.read_by)
+        && request.resource.data.read_by.hasAny([request.auth.uid]);
+      allow create, delete: if false;
+    }
+
     // ---------- Calendario de actividades ----------
     // Mismo criterio que Eventos: cualquier líder de ministerio (o el
     // equipo) puede agregar una actividad; editar/borrar solo staff o quien
@@ -296,7 +310,7 @@ service cloud.firestore {
     // aprobado (no cualquier cuenta de Google autenticada).
     match /{collection}/{docId} {
       allow read, write: if isMiembro()
-        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'groupSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings', 'activities', 'services', 'settings']);
+        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'groupSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings', 'activities', 'services', 'settings', 'notifications']);
     }
   }
 }

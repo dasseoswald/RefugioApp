@@ -5,6 +5,7 @@ import { OPERATIONAL_GROUPS, getMemberById } from '../../data/mockData.js'
 import { useRolePermissions, hasDynamicPermission } from '../../hooks/useRolePermissions.js'
 import { shareApp } from '../../lib/shareApp.js'
 import UserAvatar from './UserAvatar.jsx'
+import NotificationBell from './NotificationBell.jsx'
 import logo from '../../assets/logo.png'
 import {
     Home, Users, ClipboardList, BarChart3, Settings,
@@ -150,9 +151,12 @@ export default function Sidebar() {
                 <button onClick={() => setMobileOpen(true)} className="text-white p-2 -ml-2 cursor-pointer" aria-label="Abrir menú">
                     <Menu className="w-6 h-6" />
                 </button>
-                <div className="flex items-center gap-2">
-                    <img src={logo} alt="Refugio App" className="w-7 h-7 object-contain" />
-                    <span className="text-white font-bold text-base">Refugio App</span>
+                <div className="flex items-center gap-3">
+                    <NotificationBell />
+                    <div className="flex items-center gap-2">
+                        <img src={logo} alt="Refugio App" className="w-7 h-7 object-contain" />
+                        <span className="text-white font-bold text-base">Refugio App</span>
+                    </div>
                 </div>
             </div>
 
@@ -177,9 +181,12 @@ export default function Sidebar() {
                         <p className="text-white/50 text-xs">Somos un refugio para la familia</p>
                     </div>
                 </div>
-                <button onClick={() => setMobileOpen(false)} className="lg:hidden text-white/60 hover:text-white p-1 cursor-pointer" aria-label="Cerrar menú">
-                    <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-1">
+                    <NotificationBell />
+                    <button onClick={() => setMobileOpen(false)} className="lg:hidden text-white/60 hover:text-white p-1 cursor-pointer" aria-label="Cerrar menú">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
             </div>
 
             {/* User info — clickable to profile */}

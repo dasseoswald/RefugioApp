@@ -690,6 +690,36 @@ export function getMembersWithConsecutiveAbsences() {
     return buckets
 }
 
+// ---- Notificaciones internas (campanita en la barra superior) ----
+// Se crean SOLO desde Cloud Functions (ver functions/index.js:
+// checkConsecutiveAbsences) — el cliente nunca escribe un aviso nuevo, solo
+// se suscribe a los que le corresponden por rol y marca como leídos los
+// propios agregando su uid a read_by (así cada persona tiene su propio
+// estado de lectura sobre el mismo documento).
+export function subscribeNotifications(role, callback) {
+    if (!role) { callback([]); return () => {} }
+    const q = query(
+        collection(db, 'notifications'),
+        where('target_roles', 'array-contains', role),
+        orderBy('created_at', 'desc'),
+        limit(50)
+    )
+    return onSnapshot(q, (snap) => {
+        callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    }, (err) => console.error('Error sincronizando notificaciones', err))
+}
+
+export function markNotificationRead(notificationId, uid) {
+    if (!uid) return
+    return updateDoc(doc(db, 'notifications', notificationId), { read_by: arrayUnion(uid) })
+        .catch(err => console.error('No se pudo marcar la notificación como leída', err))
+}
+
+export function markAllNotificationsRead(notificationIds, uid) {
+    if (!uid || notificationIds.length === 0) return
+    return Promise.all(notificationIds.map(id => markNotificationRead(id, uid)))
+}
+
 // ---- Buena Tierra: clases por edad, líder y maestros/ayudantes ----
 // Las 3 clases (paz/alegria/faith) son documentos fijos, sembrados una sola
 // vez — ver seedBuenaTierraClasses más abajo. El rango de edad lo puede
