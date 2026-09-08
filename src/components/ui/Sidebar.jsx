@@ -152,11 +152,11 @@ export default function Sidebar() {
                     <Menu className="w-6 h-6" />
                 </button>
                 <div className="flex items-center gap-3">
-                    <NotificationBell />
                     <div className="flex items-center gap-2">
                         <img src={logo} alt="Refugio App" className="w-7 h-7 object-contain" />
                         <span className="text-white font-bold text-base">Refugio App</span>
                     </div>
+                    <NotificationBell />
                 </div>
             </div>
 
