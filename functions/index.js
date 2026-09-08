@@ -316,6 +316,10 @@ exports.onGroupNoticeCreated = onDocumentCreated('groupNotices/{noticeId}', asyn
     }
 
     const tokens = []
+    // null = "por rol" (llega a todos vía target_roles); array = "por
+    // ministerio" (llega solo a esos member_id vía target_member_ids,
+    // porque un ministerio no corresponde a un rol de cuenta).
+    let targetMemberIds = null
     if (notice.to_all_users) {
         // Envío a todos los usuarios con cuenta, sin mirar sus grupos.
         const usersSnap = await db.collection('users').get()
@@ -329,16 +333,31 @@ exports.onGroupNoticeCreated = onDocumentCreated('groupNotices/{noticeId}', asyn
         }
 
         const membersSnap = await db.collection('members').where(field, '==', true).get()
-        const memberIds = membersSnap.docs.map(d => d.id)
-        console.log(`onGroupNoticeCreated: group_id=${notice.group_id} field=${field} miembros=${memberIds.length}`)
-        if (memberIds.length === 0) return
+        targetMemberIds = membersSnap.docs.map(d => d.id)
+        console.log(`onGroupNoticeCreated: group_id=${notice.group_id} field=${field} miembros=${targetMemberIds.length}`)
+        if (targetMemberIds.length === 0) return
 
-        for (const idsChunk of chunk(memberIds, 10)) {
+        for (const idsChunk of chunk(targetMemberIds, 10)) {
             const usersSnap = await db.collection('users').where('member_id', 'in', idsChunk).get()
             usersSnap.forEach(doc => tokens.push(...(doc.data().fcm_tokens || [])))
         }
     }
     console.log(`onGroupNoticeCreated: tokens encontrados=${tokens.length}`)
+
+    // Notificación interna (campanita) — independiente del push, para que
+    // quien no dio permiso de notificaciones (o simplemente no vio el push)
+    // igual lo encuentre al abrir la app.
+    await db.collection('notifications').add({
+        type: 'broadcast',
+        title: String(notice.title || 'Nuevo aviso'),
+        body: String(notice.content || ''),
+        notice_id: event.params.noticeId,
+        target_roles: targetMemberIds === null ? VALID_ROLES : [],
+        target_member_ids: targetMemberIds || [],
+        read_by: [],
+        created_at: new Date().toISOString(),
+    }).catch(err => console.error('onGroupNoticeCreated: no se pudo crear la notificación interna', err))
+
     // Truncados para limitar el abuso del espacio de mensaje (RA-03), ya
     // aplicado también dentro de sendPushToTokens.
     await sendPushToTokens(tokens, String(notice.title || 'Nuevo aviso'), String(notice.content || ''), 'onGroupNoticeCreated')

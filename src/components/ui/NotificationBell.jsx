@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
-import { Bell, UserX } from 'lucide-react'
+import { Bell, UserX, Megaphone } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { subscribeNotifications, markNotificationRead, markAllNotificationsRead } from '../../data/mockData.js'
 
-// Por ahora solo Admin y Bienvenida reciben avisos (inasistencias seguidas,
-// ver functions/index.js: checkConsecutiveAbsences) — si en el futuro se
-// agregan avisos para otros roles, esta lista deja de ser necesaria porque
-// subscribeNotifications ya filtra por rol en la propia consulta.
-const ROLES_CON_AVISOS = ['admin', 'bienvenida']
+// Todos los roles pueden recibir avisos: inasistencias seguidas (solo
+// admin/bienvenida) o mensajes enviados desde "Mensajes" (a todos los
+// usuarios o a un ministerio específico, que puede tener gente de
+// cualquier rol) — subscribeNotifications ya filtra qué le corresponde a
+// cada quien, así que la campanita se muestra siempre que haya sesión.
+const ROLES_CON_CAMPANITA = ['admin', 'controller', 'attendee', 'tesorero', 'bienvenida']
 
 function timeAgo(iso) {
     const diffMs = Date.now() - new Date(iso).getTime()
@@ -28,9 +29,9 @@ export default function NotificationBell({ variant = 'dark' }) {
     const wrapperRef = useRef(null)
 
     useEffect(() => {
-        if (!ROLES_CON_AVISOS.includes(user?.role)) return
-        return subscribeNotifications(user.role, setNotifications)
-    }, [user?.role])
+        if (!ROLES_CON_CAMPANITA.includes(user?.role)) return
+        return subscribeNotifications(user.role, user.member_id, setNotifications)
+    }, [user?.role, user?.member_id])
 
     useEffect(() => {
         function handleClickOutside(e) {
@@ -40,7 +41,7 @@ export default function NotificationBell({ variant = 'dark' }) {
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
 
-    if (!ROLES_CON_AVISOS.includes(user?.role)) return null
+    if (!ROLES_CON_CAMPANITA.includes(user?.role)) return null
 
     const uid = user?.auth_uid
     const unread = notifications.filter(n => !(n.read_by || []).includes(uid))
@@ -88,9 +89,15 @@ export default function NotificationBell({ variant = 'dark' }) {
                                             className={`px-4 py-3 transition-colors ${isUnread ? 'bg-[#E8F4FC]/60 cursor-pointer hover:bg-[#E8F4FC]' : 'hover:bg-gray-50'}`}
                                         >
                                             <div className="flex items-start gap-2.5">
-                                                <div className="w-7 h-7 rounded-full bg-[#FADBD8] flex items-center justify-center flex-shrink-0 mt-0.5">
-                                                    <UserX className="w-3.5 h-3.5 text-[#E74C3C]" />
-                                                </div>
+                                                {n.type === 'broadcast' ? (
+                                                    <div className="w-7 h-7 rounded-full bg-[#E8F4FC] flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                        <Megaphone className="w-3.5 h-3.5 text-[#2696D2]" />
+                                                    </div>
+                                                ) : (
+                                                    <div className="w-7 h-7 rounded-full bg-[#FADBD8] flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                        <UserX className="w-3.5 h-3.5 text-[#E74C3C]" />
+                                                    </div>
+                                                )}
                                                 <div className="min-w-0 flex-1">
                                                     <div className="flex items-center gap-1.5">
                                                         {isUnread && <span className="w-1.5 h-1.5 rounded-full bg-[#2696D2] flex-shrink-0" />}

@@ -5,7 +5,7 @@
  * memoria + localStorage por ahora, pendiente de migración.
  */
 import { db } from '../firebase.js'
-import { collection, doc, setDoc, updateDoc, deleteDoc, getDocs, onSnapshot, writeBatch, arrayUnion, query, where, orderBy, limit } from 'firebase/firestore'
+import { collection, doc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, onSnapshot, writeBatch, arrayUnion, query, where, orderBy, limit } from 'firebase/firestore'
 
 // Ubicación de la iglesia (Un Refugio para la Familia, Coelemu) para el
 // registro automático de asistencia por GPS. El radio incluye margen para
@@ -691,22 +691,45 @@ export function getMembersWithConsecutiveAbsences() {
 }
 
 // ---- Notificaciones internas (campanita en la barra superior) ----
-// Se crean SOLO desde Cloud Functions (ver functions/index.js:
-// checkConsecutiveAbsences) — el cliente nunca escribe un aviso nuevo, solo
-// se suscribe a los que le corresponden por rol y marca como leídos los
-// propios agregando su uid a read_by (así cada persona tiene su propio
-// estado de lectura sobre el mismo documento).
-export function subscribeNotifications(role, callback) {
+// Se crean SOLO desde Cloud Functions (checkConsecutiveAbsences y
+// onGroupNoticeCreated, ver functions/index.js) — el cliente nunca escribe
+// un aviso nuevo, solo se suscribe a los que le corresponden y marca como
+// leídos los propios agregando su uid a read_by (así cada persona tiene su
+// propio estado de lectura sobre el mismo documento).
+//
+// Un aviso llega por DOS caminos posibles, según cómo se haya emitido:
+// - target_roles: para avisos por rol (inasistencias seguidas, "enviar a
+//   todos" desde Mensajes).
+// - target_member_ids: para avisos de un ministerio específico (Mensajes
+//   por grupo), que no corresponden a un rol sino a quién está marcado en
+//   ese campo del ministerio, sin importar su rol de cuenta.
+// Se combinan ambas suscripciones porque Firestore no permite un OR entre
+// dos array-contains distintos en una sola consulta.
+export function subscribeNotifications(role, memberId, callback) {
     if (!role) { callback([]); return () => {} }
-    const q = query(
-        collection(db, 'notifications'),
-        where('target_roles', 'array-contains', role),
-        orderBy('created_at', 'desc'),
-        limit(50)
+    let byRole = []
+    let byMember = []
+    const emit = () => {
+        const merged = new Map()
+        byRole.forEach(n => merged.set(n.id, n))
+        byMember.forEach(n => merged.set(n.id, n))
+        callback(Array.from(merged.values()).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 50))
+    }
+
+    const unsubRole = onSnapshot(
+        query(collection(db, 'notifications'), where('target_roles', 'array-contains', role), orderBy('created_at', 'desc'), limit(50)),
+        (snap) => { byRole = snap.docs.map(d => ({ id: d.id, ...d.data() })); emit() },
+        (err) => console.error('Error sincronizando notificaciones (rol)', err)
     )
-    return onSnapshot(q, (snap) => {
-        callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    }, (err) => console.error('Error sincronizando notificaciones', err))
+    let unsubMember = () => {}
+    if (memberId) {
+        unsubMember = onSnapshot(
+            query(collection(db, 'notifications'), where('target_member_ids', 'array-contains', memberId), orderBy('created_at', 'desc'), limit(50)),
+            (snap) => { byMember = snap.docs.map(d => ({ id: d.id, ...d.data() })); emit() },
+            (err) => console.error('Error sincronizando notificaciones (miembro)', err)
+        )
+    }
+    return () => { unsubRole(); unsubMember() }
 }
 
 export function markNotificationRead(notificationId, uid) {
@@ -718,6 +741,88 @@ export function markNotificationRead(notificationId, uid) {
 export function markAllNotificationsRead(notificationIds, uid) {
     if (!uid || notificationIds.length === 0) return
     return Promise.all(notificationIds.map(id => markNotificationRead(id, uid)))
+}
+
+// ---- Chat privado 1 a 1 entre miembros ----
+// Id determinístico (los dos uid de Firebase Auth, ordenados y unidos) para
+// que dos personas nunca terminen con dos conversaciones distintas entre
+// sí sin importar quién le escribió primero a quién.
+export function conversationIdFor(uidA, uidB) {
+    return [uidA, uidB].sort().join('_')
+}
+
+export function subscribeConversations(uid, callback) {
+    if (!uid) { callback([]); return () => {} }
+    const q = query(collection(db, 'conversations'), where('participants', 'array-contains', uid), orderBy('last_message_at', 'desc'))
+    return onSnapshot(q, (snap) => {
+        callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    }, (err) => console.error('Error sincronizando conversaciones', err))
+}
+
+// Crea la conversación solo si todavía no existe (idempotente gracias al id
+// determinístico) — así "escribirle" a alguien con quien ya hay historial
+// simplemente reabre el mismo hilo.
+export async function getOrCreateConversation(me, other) {
+    const conversationId = conversationIdFor(me.uid, other.uid)
+    const ref = doc(db, 'conversations', conversationId)
+    const snap = await getDoc(ref)
+    if (!snap.exists()) {
+        const now = new Date().toISOString()
+        await setDoc(ref, {
+            participants: [me.uid, other.uid].sort(),
+            participant_info: {
+                [me.uid]: { name: me.name, photo_url: me.photo_url || null },
+                [other.uid]: { name: other.name, photo_url: other.photo_url || null },
+            },
+            last_message: '',
+            last_message_at: now,
+            last_sender_uid: null,
+            last_read_at: { [me.uid]: now },
+            created_at: now,
+        })
+    }
+    return conversationId
+}
+
+export function listenToConversationMessages(conversationId, callback) {
+    const q = query(collection(db, 'conversations', conversationId, 'messages'), orderBy('created_at', 'asc'), limit(300))
+    return onSnapshot(q, (snap) => {
+        callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    }, (err) => console.error('Error sincronizando mensajes de la conversación', err))
+}
+
+export function sendConversationMessage(conversationId, { content, sender_id, sender_name, sender_photo, sender_uid, media_url, media_type }) {
+    const now = new Date().toISOString()
+    const messagesRef = collection(db, 'conversations', conversationId, 'messages')
+    return Promise.all([
+        setDoc(doc(messagesRef), {
+            content: content || '',
+            sender_id,
+            sender_name,
+            sender_photo: sender_photo || null,
+            sender_uid: sender_uid || null,
+            media_url: media_url || null,
+            media_type: media_type || null,
+            created_at: now,
+        }),
+        updateDoc(doc(db, 'conversations', conversationId), {
+            last_message: (content && content.trim()) || (media_url ? 'Archivo adjunto' : ''),
+            last_message_at: now,
+            last_sender_uid: sender_uid || null,
+            [`last_read_at.${sender_uid}`]: now,
+        }),
+    ]).catch(err => console.error('No se pudo enviar el mensaje', err))
+}
+
+export function deleteConversationMessage(conversationId, messageId) {
+    return deleteDoc(doc(db, 'conversations', conversationId, 'messages', messageId))
+        .catch(err => console.error('No se pudo borrar el mensaje', err))
+}
+
+export function markConversationRead(conversationId, uid) {
+    if (!uid) return
+    return updateDoc(doc(db, 'conversations', conversationId), { [`last_read_at.${uid}`]: new Date().toISOString() })
+        .catch(err => console.error('No se pudo marcar la conversación como leída', err))
 }
 
 // ---- Buena Tierra: clases por edad, líder y maestros/ayudantes ----

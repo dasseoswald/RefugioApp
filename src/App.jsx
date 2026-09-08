@@ -25,6 +25,7 @@ import PrayerRequestsPage from './pages/shared/PrayerRequestsPage.jsx'
 import EventsPage from './pages/shared/EventsPage.jsx'
 import CalendarioPage from './pages/shared/CalendarioPage.jsx'
 import LiveChatPage from './pages/shared/LiveChatPage.jsx'
+import DirectMessagesPage from './pages/shared/DirectMessagesPage.jsx'
 import RadioPage from './pages/shared/RadioPage.jsx'
 import BibliaPage from './pages/shared/BibliaPage.jsx'
 import ForumPage from './pages/shared/ForumPage.jsx'
@@ -307,6 +308,11 @@ export default function App() {
             <Route path="/:role/chat" element={
                 <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero', 'bienvenida']}>
                     <AppLayout><LiveChatPage /></AppLayout>
+                </ProtectedRoute>
+            } />
+            <Route path="/:role/mensajes-directos" element={
+                <ProtectedRoute allowedRoles={['admin', 'controller', 'attendee', 'tesorero', 'bienvenida']}>
+                    <AppLayout><DirectMessagesPage /></AppLayout>
                 </ProtectedRoute>
             } />
             <Route path="/:role/foro" element={
