@@ -10,7 +10,18 @@ import {
 } from 'lucide-react'
 
 const WEEKDAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
-const ICON_OPTIONS = ['Users', 'BookOpen', 'Sprout', 'UserCircle', 'Music', 'Home', 'HandHeart', 'Baby']
+// El value es el nombre real del ícono de lucide-react (así lo resuelve
+// Sidebar.jsx vía ICONS_MAP) — solo la etiqueta que ve la persona se traduce.
+const ICON_OPTIONS = [
+    { value: 'Users', label: 'Personas' },
+    { value: 'BookOpen', label: 'Libro' },
+    { value: 'Sprout', label: 'Planta' },
+    { value: 'UserCircle', label: 'Perfil' },
+    { value: 'Music', label: 'Música' },
+    { value: 'Home', label: 'Casa' },
+    { value: 'HandHeart', label: 'Servicio' },
+    { value: 'Baby', label: 'Niños' },
+]
 
 function slugifyId(name) {
     return (name || '')
@@ -293,7 +304,7 @@ export default function CreateChurchPage() {
                                             className="flex-1 min-w-0 px-3 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] text-sm" />
                                         <select value={row.icon} onChange={(e) => updateMinistryRow(row.id, { icon: e.target.value })}
                                             className="px-2 py-2.5 rounded-xl border-2 border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#2696D2] text-sm cursor-pointer">
-                                            {ICON_OPTIONS.map(i => <option key={i} value={i}>{i}</option>)}
+                                            {ICON_OPTIONS.map(i => <option key={i.value} value={i.value}>{i.label}</option>)}
                                         </select>
                                         {ministries.length > 1 && (
                                             <button type="button" onClick={() => removeMinistryRow(row.id)} className="p-2 text-[#E74C3C] hover:bg-[#FADBD8] rounded-lg cursor-pointer flex-shrink-0">
