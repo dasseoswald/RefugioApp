@@ -772,15 +772,21 @@ export function subscribeNotifications(role, memberId, callback) {
         callback(Array.from(merged.values()).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 50))
     }
 
+    // church_id en la propia consulta: la regla de seguridad exige que el
+    // documento coincida con la iglesia de quien pregunta (ver
+    // esDestinatarioDeNotificacion en firestore.rules) — sin filtrarlo aquí
+    // también, Firestore rechaza la consulta entera por no poder verificar
+    // esa condición sobre una lista/query.
+    const cid = getCurrentChurchId()
     const unsubRole = onSnapshot(
-        query(collection(db, 'notifications'), where('target_roles', 'array-contains', role), orderBy('created_at', 'desc'), limit(50)),
+        query(collection(db, 'notifications'), where('church_id', '==', cid), where('target_roles', 'array-contains', role), orderBy('created_at', 'desc'), limit(50)),
         (snap) => { byRole = snap.docs.map(d => ({ id: d.id, ...d.data() })); emit() },
         (err) => console.error('Error sincronizando notificaciones (rol)', err)
     )
     let unsubMember = () => {}
     if (memberId) {
         unsubMember = onSnapshot(
-            query(collection(db, 'notifications'), where('target_member_ids', 'array-contains', memberId), orderBy('created_at', 'desc'), limit(50)),
+            query(collection(db, 'notifications'), where('church_id', '==', cid), where('target_member_ids', 'array-contains', memberId), orderBy('created_at', 'desc'), limit(50)),
             (snap) => { byMember = snap.docs.map(d => ({ id: d.id, ...d.data() })); emit() },
             (err) => console.error('Error sincronizando notificaciones (miembro)', err)
         )

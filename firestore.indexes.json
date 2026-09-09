@@ -21,6 +21,7 @@
             "collectionGroup": "notifications",
             "queryScope": "COLLECTION",
             "fields": [
+                { "fieldPath": "church_id", "order": "ASCENDING" },
                 { "fieldPath": "target_roles", "arrayConfig": "CONTAINS" },
                 { "fieldPath": "created_at", "order": "DESCENDING" }
             ]
@@ -29,6 +30,7 @@
             "collectionGroup": "notifications",
             "queryScope": "COLLECTION",
             "fields": [
+                { "fieldPath": "church_id", "order": "ASCENDING" },
                 { "fieldPath": "target_member_ids", "arrayConfig": "CONTAINS" },
                 { "fieldPath": "created_at", "order": "DESCENDING" }
             ]
