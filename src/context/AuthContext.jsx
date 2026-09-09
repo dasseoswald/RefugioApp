@@ -112,7 +112,15 @@ export function AuthProvider({ children }) {
                     setLoading(false)
                     return
                 }
-                await bootstrapUser(firebaseUser)
+                try {
+                    await bootstrapUser(firebaseUser)
+                } catch (err) {
+                    // Un fallo acá (ej. Firestore momentáneamente sin red) no
+                    // debe dejar a la persona con la app trabada en el splash
+                    // para siempre — se registra para poder diagnosticarlo y
+                    // se sigue de largo (setLoading(false) más abajo).
+                    console.error('No se pudo inicializar la sesión', err)
+                }
             } else {
                 setUser(null)
                 setNeedsPassword(false)

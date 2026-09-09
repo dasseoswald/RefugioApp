@@ -1316,8 +1316,16 @@ export function createOrGetUserForFirebaseAccount({ uid, email: rawEmail, displa
 // comportamiento de siempre (login/registro sin parámetro → Refugio).
 export async function resolveChurchIdForLogin(email, pendingChurchSlug) {
     if (email) {
-        const lookupSnap = await getDoc(doc(db, 'userLookup', email))
-        if (lookupSnap.exists()) return lookupSnap.data().church_id || 'refugio'
+        try {
+            const lookupSnap = await getDoc(doc(db, 'userLookup', email))
+            if (lookupSnap.exists()) return lookupSnap.data().church_id || 'refugio'
+        } catch (err) {
+            // No se deja sin resolver por un tropiezo de red/permiso puntual
+            // — mejor caer al valor por defecto (registrado abajo para poder
+            // diagnosticarlo) que dejar a alguien de una iglesia real viendo
+            // el menú reducido de una iglesia sin migrar.
+            console.error('No se pudo resolver la iglesia por userLookup, usando refugio por defecto', err)
+        }
     }
     if (pendingChurchSlug) {
         const church = await getChurchBySlug(pendingChurchSlug)
