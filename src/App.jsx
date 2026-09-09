@@ -35,7 +35,10 @@ import CheckinPage from './pages/CheckinPage.jsx'
 import OnboardingPrompt from './components/shared/OnboardingPrompt.jsx'
 import SetPasswordPrompt from './components/shared/SetPasswordPrompt.jsx'
 import EmailVerificationBanner from './components/shared/EmailVerificationBanner.jsx'
+import CreateChurchPage from './pages/CreateChurchPage.jsx'
+import PlataformaPage from './pages/admin/PlataformaPage.jsx'
 import { OPERATIONAL_GROUPS } from './data/mockData.js'
+import { useChurchProfile } from './hooks/useChurchProfile.js'
 
 function AppLayout({ children }) {
     return (
@@ -64,6 +67,8 @@ const DEFAULT_ROUTES = { admin: '/admin', controller: '/controller', tesorero: '
 const SPLASH_DURATION_MS = 2000
 
 function SplashScreen() {
+    const church = useChurchProfile()
+    const appName = church?.name || 'Refugio App'
     return (
         <div className="min-h-screen relative flex items-center justify-center animate-fade-in overflow-hidden">
             <video autoPlay muted loop playsInline
@@ -71,7 +76,7 @@ function SplashScreen() {
                 src="/videofondo.mp4" />
             <div className="absolute inset-0 z-0"
                 style={{ background: 'linear-gradient(180deg, rgba(1,1,1,0.8) 0%, rgba(17,17,17,0.8) 100%)' }} />
-            <img src={logo} alt="Refugio App" className="w-28 h-28 object-contain relative z-10" />
+            <img src={church?.logo_url || logo} alt={appName} className="w-28 h-28 object-contain relative z-10" />
         </div>
     )
 }
@@ -115,6 +120,20 @@ export default function App() {
                 isAuthenticated
                     ? <Navigate to={sessionStorage.getItem('pending_checkin') ? '/checkin' : (DEFAULT_ROUTES[user.role] || '/attendee')} replace />
                     : <RegisterPage />
+            } />
+            {/* Link de registro propio de una iglesia (lo comparte su admin
+                con sus miembros) — misma pantalla, resuelve el slug a la
+                iglesia correspondiente en vez del valor por defecto. */}
+            <Route path="/registro/:churchSlug" element={
+                isAuthenticated
+                    ? <Navigate to={sessionStorage.getItem('pending_checkin') ? '/checkin' : (DEFAULT_ROUTES[user.role] || '/attendee')} replace />
+                    : <RegisterPage />
+            } />
+            {/* Multi-iglesia: crear una iglesia nueva desde el inicio de la app. */}
+            <Route path="/crear-iglesia" element={
+                isAuthenticated
+                    ? <Navigate to={DEFAULT_ROUTES[user.role] || '/attendee'} replace />
+                    : <CreateChurchPage />
             } />
 
             {/* Código QR de la entrada: registra la asistencia al servicio activo */}
@@ -231,6 +250,14 @@ export default function App() {
             <Route path="/admin/settings" element={
                 <ProtectedRoute allowedRoles={['admin']}>
                     <AppLayout><SettingsPage /></AppLayout>
+                </ProtectedRoute>
+            } />
+            {/* Multi-iglesia: panel de Refugio para ver las iglesias creadas
+                en la plataforma. No se agrega al Sidebar de ninguna iglesia
+                nueva (ver refugioOnly) — solo Refugio llega acá. */}
+            <Route path="/admin/plataforma" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                    <AppLayout><PlataformaPage /></AppLayout>
                 </ProtectedRoute>
             } />
             <Route path="/admin/profile" element={

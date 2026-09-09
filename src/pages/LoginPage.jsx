@@ -189,6 +189,12 @@ export default function LoginPage() {
                                 Crear cuenta gratis
                             </Link>
                         </p>
+                        <p className="mt-3 text-center text-xs text-[#6E6E6E]">
+                            ¿Representas a otra iglesia?{' '}
+                            <Link to="/crear-iglesia" className="text-[#2696D2] hover:underline font-medium">
+                                Crea tu propia plataforma
+                            </Link>
+                        </p>
                     </div>
                 </div>
             </div>

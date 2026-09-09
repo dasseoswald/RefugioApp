@@ -12,7 +12,10 @@ import {
     EmailAuthProvider,
 } from 'firebase/auth'
 import { auth, googleProvider } from '../firebase.js'
-import { updateUserProfile, createOrGetUserForFirebaseAccount, coreDataReadyPromise, startCoreDataSync, updateLastSeen } from '../data/mockData.js'
+import {
+    updateUserProfile, createOrGetUserForFirebaseAccount, coreDataReadyPromise, startCoreDataSync, updateLastSeen,
+    resolveChurchIdForLogin, getChurchProfile, applyChurchProfile,
+} from '../data/mockData.js'
 
 const HEARTBEAT_INTERVAL_MS = 60 * 1000
 
@@ -23,6 +26,23 @@ const AuthContext = createContext(null)
 // lo recoja. Evita crear el usuario dos veces en paralelo (registro +
 // listener) cuando ambos intentan vincular la cuenta al mismo tiempo.
 let pendingRegistrationName = null
+
+// Slug de iglesia de un link /registro/:churchSlug — mismo mecanismo que
+// pendingRegistrationName, solo se usa si esta cuenta es un alta nueva
+// (una cuenta que ya existe conserva la iglesia que ya tenía).
+let pendingRegistrationChurchSlug = null
+export function setPendingRegistrationChurchSlug(slug) { pendingRegistrationChurchSlug = slug || null }
+
+// Mientras se está creando una iglesia nueva (CreateChurchPage), la cuenta
+// de Firebase Auth del fundador ya existe (createUserWithEmailAndPassword)
+// ANTES de que exista su iglesia/userLookup — si el listener normal de
+// abajo corriera en ese momento, bootstrapearía a esa cuenta como un
+// attendee más de Refugio (el valor por defecto) antes de que
+// CreateChurchPage alcance a llamar a la función createChurch. Esta bandera
+// hace que el listener se quede quieto durante esa ventana; CreateChurchPage
+// llama a completeChurchCreation() (ver más abajo) cuando ya terminó.
+let pendingChurchCreation = false
+export function setPendingChurchCreation(value) { pendingChurchCreation = value }
 
 const AUTH_ERROR_MESSAGES = {
     'auth/user-not-found': 'Correo o contraseña incorrectos.',
@@ -43,27 +63,56 @@ export function AuthProvider({ children }) {
     const [needsPassword, setNeedsPassword] = useState(false)
     const [emailVerified, setEmailVerified] = useState(true)
 
+    // Extraído del listener para poder llamarlo también a mano, una sola
+    // vez, cuando termina de crearse una iglesia nueva (ver
+    // completeChurchCreation más abajo) — misma lógica, distinto disparador.
+    const bootstrapUser = useCallback(async (firebaseUser) => {
+        const email = (firebaseUser.email || '').trim().toLowerCase()
+        // Resolver a qué iglesia pertenece esta cuenta ANTES de arrancar
+        // cualquier sincronización — así los listeners de
+        // members/users/services/attendances ya nacen filtrados y nunca
+        // bajan datos de otra iglesia al navegador.
+        const churchId = await resolveChurchIdForLogin(email, pendingRegistrationChurchSlug)
+        pendingRegistrationChurchSlug = null
+
+        startCoreDataSync(churchId)
+        await coreDataReadyPromise
+
+        // Nombre/logo/ministerios/ubicación de la iglesia, listos antes de
+        // que se renderice cualquier pantalla autenticada.
+        const church = await getChurchProfile(churchId)
+        applyChurchProfile(church)
+
+        const appUser = createOrGetUserForFirebaseAccount({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: pendingRegistrationName || firebaseUser.displayName,
+            photoURL: firebaseUser.photoURL,
+            churchId,
+        })
+        pendingRegistrationName = null
+        // Si entró con Google y todavía no tiene contraseña propia, le
+        // ofrecemos crear una (útil cuando Google no funciona, p. ej.
+        // dentro del navegador de WhatsApp/Instagram).
+        setNeedsPassword(!firebaseUser.providerData.some(p => p.providerId === 'password'))
+        // Con Google el correo ya viene verificado por Google mismo, así
+        // que esto solo aplica de verdad a cuentas de correo y contraseña
+        // sin confirmar todavía.
+        setEmailVerified(firebaseUser.emailVerified)
+        setUser(appUser)
+    }, [])
+
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
-                startCoreDataSync()
-                await coreDataReadyPromise
-                const appUser = createOrGetUserForFirebaseAccount({
-                    uid: firebaseUser.uid,
-                    email: firebaseUser.email,
-                    displayName: pendingRegistrationName || firebaseUser.displayName,
-                    photoURL: firebaseUser.photoURL,
-                })
-                pendingRegistrationName = null
-                // Si entró con Google y todavía no tiene contraseña propia,
-                // le ofrecemos crear una (útil cuando Google no funciona,
-                // p. ej. dentro del navegador de WhatsApp/Instagram).
-                setNeedsPassword(!firebaseUser.providerData.some(p => p.providerId === 'password'))
-                // Con Google el correo ya viene verificado por Google mismo,
-                // así que esto solo aplica de verdad a cuentas de correo y
-                // contraseña sin confirmar todavía.
-                setEmailVerified(firebaseUser.emailVerified)
-                setUser(appUser)
+                if (pendingChurchCreation) {
+                    // CreateChurchPage está a mitad de crear la iglesia de
+                    // esta cuenta — no la bootstreamos todavía (ver el
+                    // comentario de pendingChurchCreation más arriba).
+                    setLoading(false)
+                    return
+                }
+                await bootstrapUser(firebaseUser)
             } else {
                 setUser(null)
                 setNeedsPassword(false)
@@ -72,7 +121,19 @@ export function AuthProvider({ children }) {
             setLoading(false)
         })
         return unsubscribe
-    }, [])
+    }, [bootstrapUser])
+
+    // Llamado por CreateChurchPage justo después de que la función
+    // createChurch termina — ya existe userLookup para este correo, así que
+    // bootstrapUser ahora sí resuelve la iglesia recién creada (no Refugio).
+    const completeChurchCreation = useCallback(async () => {
+        pendingChurchCreation = false
+        if (auth.currentUser) {
+            setLoading(true)
+            await bootstrapUser(auth.currentUser)
+            setLoading(false)
+        }
+    }, [bootstrapUser])
 
     useEffect(() => {
         if (!user) return
@@ -188,7 +249,7 @@ export function AuthProvider({ children }) {
         user, loading, login, loginWithGoogle, register, logout, updateProfile,
         needsPassword, setAccountPassword, confirmPassword, isAuthenticated: !!user,
         isEmailUnverified: !!user && !emailVerified,
-        resendVerificationEmail, refreshEmailVerified,
+        resendVerificationEmail, refreshEmailVerified, completeChurchCreation,
     }
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

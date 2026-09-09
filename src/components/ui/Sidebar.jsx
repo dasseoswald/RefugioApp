@@ -1,19 +1,20 @@
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { OPERATIONAL_GROUPS, getMemberById } from '../../data/mockData.js'
+import { OPERATIONAL_GROUPS, getMemberById, getCurrentChurchId } from '../../data/mockData.js'
 import { useRolePermissions, hasDynamicPermission } from '../../hooks/useRolePermissions.js'
+import { useChurchProfile } from '../../hooks/useChurchProfile.js'
 import { shareApp } from '../../lib/shareApp.js'
 import UserAvatar from './UserAvatar.jsx'
 import NotificationBell from './NotificationBell.jsx'
-import logo from '../../assets/logo.png'
+import defaultLogo from '../../assets/logo.png'
 import {
     Home, Users, ClipboardList, BarChart3, Settings,
     CalendarDays, LogOut, Shield,
     UserCheck, BookOpen, Sprout, ChevronDown, ChevronRight,
     UserCircle, UserSquare, Baby, Music, Layers, Megaphone, HandHeart, PartyPopper,
     Menu, X, MessageCircle, MessageSquare, Radio, Share2, Check, Facebook, Instagram, Landmark, MessageCircleQuestion, Projector,
-    CalendarRange,
+    CalendarRange, Church,
 } from 'lucide-react'
 
 const INSTAGRAM_URL = 'https://www.instagram.com/unrefugioparalafamilia/'
@@ -34,71 +35,72 @@ const NAV_CONFIG = {
         { to: '/admin/members', icon: Users, label: 'Miembros' },
         { to: '/admin/reports', icon: BarChart3, label: 'Reportes' },
         { to: '/admin/users', icon: Shield, label: 'Usuarios' },
-        { to: '/admin/mensajes', icon: Megaphone, label: 'Mensajes' },
+        { to: '/admin/plataforma', icon: Church, label: 'Plataforma', refugioOnly: true },
+        { to: '/admin/mensajes', icon: Megaphone, label: 'Mensajes', refugioOnly: true },
         { to: '/admin/nuevos', icon: UserCheck, label: 'Nuevos' },
-        { to: '/admin/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
-        { to: '/presentacion', icon: Projector, label: 'Presentación' },
-        { to: '/admin/eventos', icon: PartyPopper, label: 'Eventos' },
-        { to: '/admin/calendario', icon: CalendarRange, label: 'Calendario' },
-        { to: '/admin/chat', icon: MessageCircle, label: 'Chat en Vivo' },
-        { to: '/admin/mensajes-directos', icon: MessageSquare, label: 'Mensajes Directos' },
-        { to: '/admin/foro', icon: MessageCircleQuestion, label: 'Foro' },
-        { to: '/admin/biblia', icon: BookOpen, label: 'Biblia' },
-        { to: '/admin/radio', icon: Radio, label: 'Radio Refugio' },
+        { to: '/admin/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud', refugioOnly: true },
+        { to: '/presentacion', icon: Projector, label: 'Presentación', refugioOnly: true },
+        { to: '/admin/eventos', icon: PartyPopper, label: 'Eventos', refugioOnly: true },
+        { to: '/admin/calendario', icon: CalendarRange, label: 'Calendario', refugioOnly: true },
+        { to: '/admin/chat', icon: MessageCircle, label: 'Chat en Vivo', refugioOnly: true },
+        { to: '/admin/mensajes-directos', icon: MessageSquare, label: 'Mensajes Directos', refugioOnly: true },
+        { to: '/admin/foro', icon: MessageCircleQuestion, label: 'Foro', refugioOnly: true },
+        { to: '/admin/biblia', icon: BookOpen, label: 'Biblia', refugioOnly: true },
+        { to: '/admin/radio', icon: Radio, label: 'Radio Refugio', refugioOnly: true },
     ],
     controller: [
         { to: '/controller', icon: Home, label: 'Dashboard', end: true },
         { to: '/controller/services', icon: CalendarDays, label: 'Servicios' },
         { to: '/controller/members', icon: Users, label: 'Miembros' },
         { to: '/controller/reports', icon: BarChart3, label: 'Reportes' },
-        { to: '/controller/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
-        { to: '/presentacion', icon: Projector, label: 'Presentación' },
-        { to: '/controller/eventos', icon: PartyPopper, label: 'Eventos' },
-        { to: '/controller/calendario', icon: CalendarRange, label: 'Calendario' },
-        { to: '/controller/chat', icon: MessageCircle, label: 'Chat en Vivo' },
-        { to: '/controller/mensajes-directos', icon: MessageSquare, label: 'Mensajes Directos' },
-        { to: '/controller/foro', icon: MessageCircleQuestion, label: 'Foro' },
-        { to: '/controller/biblia', icon: BookOpen, label: 'Biblia' },
-        { to: '/controller/radio', icon: Radio, label: 'Radio Refugio' },
+        { to: '/controller/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud', refugioOnly: true },
+        { to: '/presentacion', icon: Projector, label: 'Presentación', refugioOnly: true },
+        { to: '/controller/eventos', icon: PartyPopper, label: 'Eventos', refugioOnly: true },
+        { to: '/controller/calendario', icon: CalendarRange, label: 'Calendario', refugioOnly: true },
+        { to: '/controller/chat', icon: MessageCircle, label: 'Chat en Vivo', refugioOnly: true },
+        { to: '/controller/mensajes-directos', icon: MessageSquare, label: 'Mensajes Directos', refugioOnly: true },
+        { to: '/controller/foro', icon: MessageCircleQuestion, label: 'Foro', refugioOnly: true },
+        { to: '/controller/biblia', icon: BookOpen, label: 'Biblia', refugioOnly: true },
+        { to: '/controller/radio', icon: Radio, label: 'Radio Refugio', refugioOnly: true },
     ],
     attendee: [
         { to: '/attendee', icon: Home, label: 'Mi Asistencia', end: true },
-        { to: '/attendee/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
-        { to: '/attendee/eventos', icon: PartyPopper, label: 'Eventos' },
-        { to: '/attendee/calendario', icon: CalendarRange, label: 'Calendario' },
-        { to: '/attendee/chat', icon: MessageCircle, label: 'Chat en Vivo' },
-        { to: '/attendee/mensajes-directos', icon: MessageSquare, label: 'Mensajes Directos' },
-        { to: '/attendee/foro', icon: MessageCircleQuestion, label: 'Foro' },
-        { to: '/attendee/biblia', icon: BookOpen, label: 'Biblia' },
-        { to: '/attendee/radio', icon: Radio, label: 'Radio Refugio' },
+        { to: '/attendee/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud', refugioOnly: true },
+        { to: '/attendee/eventos', icon: PartyPopper, label: 'Eventos', refugioOnly: true },
+        { to: '/attendee/calendario', icon: CalendarRange, label: 'Calendario', refugioOnly: true },
+        { to: '/attendee/chat', icon: MessageCircle, label: 'Chat en Vivo', refugioOnly: true },
+        { to: '/attendee/mensajes-directos', icon: MessageSquare, label: 'Mensajes Directos', refugioOnly: true },
+        { to: '/attendee/foro', icon: MessageCircleQuestion, label: 'Foro', refugioOnly: true },
+        { to: '/attendee/biblia', icon: BookOpen, label: 'Biblia', refugioOnly: true },
+        { to: '/attendee/radio', icon: Radio, label: 'Radio Refugio', refugioOnly: true },
     ],
     tesorero: [
         { to: '/tesorero', icon: Landmark, label: 'Finanzas', end: true },
         { to: '/tesorero/services', icon: CalendarDays, label: 'Servicios', permissionKey: 'manage_services' },
         { to: '/tesorero/members', icon: Users, label: 'Miembros', permissionKey: 'manage_members' },
         { to: '/tesorero/reports', icon: BarChart3, label: 'Reportes', permissionKey: 'view_reports' },
-        { to: '/tesorero/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
-        { to: '/tesorero/eventos', icon: PartyPopper, label: 'Eventos' },
-        { to: '/tesorero/calendario', icon: CalendarRange, label: 'Calendario' },
-        { to: '/tesorero/chat', icon: MessageCircle, label: 'Chat en Vivo' },
-        { to: '/tesorero/mensajes-directos', icon: MessageSquare, label: 'Mensajes Directos' },
-        { to: '/tesorero/foro', icon: MessageCircleQuestion, label: 'Foro' },
-        { to: '/tesorero/biblia', icon: BookOpen, label: 'Biblia' },
-        { to: '/tesorero/radio', icon: Radio, label: 'Radio Refugio' },
+        { to: '/tesorero/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud', refugioOnly: true },
+        { to: '/tesorero/eventos', icon: PartyPopper, label: 'Eventos', refugioOnly: true },
+        { to: '/tesorero/calendario', icon: CalendarRange, label: 'Calendario', refugioOnly: true },
+        { to: '/tesorero/chat', icon: MessageCircle, label: 'Chat en Vivo', refugioOnly: true },
+        { to: '/tesorero/mensajes-directos', icon: MessageSquare, label: 'Mensajes Directos', refugioOnly: true },
+        { to: '/tesorero/foro', icon: MessageCircleQuestion, label: 'Foro', refugioOnly: true },
+        { to: '/tesorero/biblia', icon: BookOpen, label: 'Biblia', refugioOnly: true },
+        { to: '/tesorero/radio', icon: Radio, label: 'Radio Refugio', refugioOnly: true },
     ],
     bienvenida: [
         { to: '/bienvenida', icon: UserCheck, label: 'Nuevos', end: true },
         { to: '/bienvenida/services', icon: CalendarDays, label: 'Servicios', permissionKey: 'manage_services' },
         { to: '/bienvenida/members', icon: Users, label: 'Miembros', permissionKey: 'manage_members' },
         { to: '/bienvenida/reports', icon: BarChart3, label: 'Reportes', permissionKey: 'view_reports' },
-        { to: '/bienvenida/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud' },
-        { to: '/bienvenida/eventos', icon: PartyPopper, label: 'Eventos' },
-        { to: '/bienvenida/calendario', icon: CalendarRange, label: 'Calendario' },
-        { to: '/bienvenida/chat', icon: MessageCircle, label: 'Chat en Vivo' },
-        { to: '/bienvenida/mensajes-directos', icon: MessageSquare, label: 'Mensajes Directos' },
-        { to: '/bienvenida/foro', icon: MessageCircleQuestion, label: 'Foro' },
-        { to: '/bienvenida/biblia', icon: BookOpen, label: 'Biblia' },
-        { to: '/bienvenida/radio', icon: Radio, label: 'Radio Refugio' },
+        { to: '/bienvenida/oraciones', icon: HandHeart, label: 'Oraciones y Gratitud', refugioOnly: true },
+        { to: '/bienvenida/eventos', icon: PartyPopper, label: 'Eventos', refugioOnly: true },
+        { to: '/bienvenida/calendario', icon: CalendarRange, label: 'Calendario', refugioOnly: true },
+        { to: '/bienvenida/chat', icon: MessageCircle, label: 'Chat en Vivo', refugioOnly: true },
+        { to: '/bienvenida/mensajes-directos', icon: MessageSquare, label: 'Mensajes Directos', refugioOnly: true },
+        { to: '/bienvenida/foro', icon: MessageCircleQuestion, label: 'Foro', refugioOnly: true },
+        { to: '/bienvenida/biblia', icon: BookOpen, label: 'Biblia', refugioOnly: true },
+        { to: '/bienvenida/radio', icon: Radio, label: 'Radio Refugio', refugioOnly: true },
     ],
 }
 
@@ -115,13 +117,22 @@ export default function Sidebar() {
     const navigate = useNavigate()
     const location = useLocation()
     const rolePermissions = useRolePermissions()
+    const church = useChurchProfile()
+    // Funciones todavía exclusivas de Refugio (Etapa 1 de multi-iglesia) —
+    // ver mockData.js: startCoreDataSync, que ni siquiera sincroniza los
+    // datos de estas pantallas para otra iglesia.
+    const isRefugio = getCurrentChurchId() === 'refugio'
     const navItems = (NAV_CONFIG[user?.role] || [])
         .filter(item => !item.permissionKey || hasDynamicPermission(rolePermissions, user?.role, item.permissionKey))
+        .filter(item => !item.refugioOnly || isRefugio)
     const profileRoute = PROFILE_ROUTES[user?.role] || '/login'
     const isProfileActive = location.pathname === profileRoute
     const [groupsOpen, setGroupsOpen] = useState(true)
     const [mobileOpen, setMobileOpen] = useState(false)
     const [shareCopied, setShareCopied] = useState(false)
+    const appName = church?.name || 'Refugio App'
+    const appTagline = church?.tagline || 'Somos un refugio para la familia'
+    const logoUrl = church?.logo_url || defaultLogo
 
     const handleShareApp = async () => {
         const result = await shareApp()
@@ -131,11 +142,12 @@ export default function Sidebar() {
         }
     }
 
-    // Determinar los grupos permitidos
+    // Determinar los grupos permitidos — los dashboards de ministerio
+    // todavía son exclusivos de Refugio (ver isRefugio arriba).
     const myMember = user?.member_id ? getMemberById(user.member_id) : null
-    const allowedGroups = user?.role === 'admin' 
-        ? OPERATIONAL_GROUPS 
-        : OPERATIONAL_GROUPS.filter(g => myMember && myMember[g.field])
+    const allowedGroups = !isRefugio ? [] : (user?.role === 'admin'
+        ? OPERATIONAL_GROUPS
+        : OPERATIONAL_GROUPS.filter(g => myMember && myMember[g.field]))
 
     const handleLogout = () => {
         logout()
@@ -158,8 +170,8 @@ export default function Sidebar() {
                 </button>
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2">
-                        <img src={logo} alt="Refugio App" className="w-7 h-7 object-contain" />
-                        <span className="text-white font-bold text-base">Refugio App</span>
+                        <img src={logoUrl} alt={appName} className="w-7 h-7 object-contain" />
+                        <span className="text-white font-bold text-base">{appName}</span>
                     </div>
                     <NotificationBell />
                 </div>
@@ -177,13 +189,13 @@ export default function Sidebar() {
             <div className="p-6 border-b border-white/10 flex items-center justify-between"
                 style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))' }}>
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden"
                         style={{ background: 'linear-gradient(135deg, #2696D2, #5CB0E0)' }}>
-                        <img src={logo} alt="Refugio App" className="w-7 h-7 object-contain" />
+                        <img src={logoUrl} alt={appName} className="w-7 h-7 object-contain" />
                     </div>
                     <div>
-                        <h1 className="text-white font-bold text-lg leading-tight">Refugio App</h1>
-                        <p className="text-white/50 text-xs">Somos un refugio para la familia</p>
+                        <h1 className="text-white font-bold text-lg leading-tight">{appName}</h1>
+                        <p className="text-white/50 text-xs">{appTagline}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-1">

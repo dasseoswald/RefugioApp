@@ -25,12 +25,18 @@ exports.syncUserRoleOnUserWrite = onDocumentWritten('users/{userId}', async (eve
     const after = event.data?.after?.data()
     if (!after?.auth_uid) return
     const before = event.data?.before?.data()
-    if (before && before.auth_uid === after.auth_uid && before.role === after.role && before.member_id === after.member_id) {
+    if (before && before.auth_uid === after.auth_uid && before.role === after.role
+        && before.member_id === after.member_id && before.church_id === after.church_id) {
         return // nada relevante cambió (p. ej. solo el latido de "última conexión")
     }
+    // church_id: de dónde las reglas leen myChurchId() (ver firestore.rules).
+    // Sin este espejo, cualquier chequeo de aislamiento entre iglesias
+    // quedaría roto porque userRoles nunca sabría a qué iglesia pertenece
+    // esta cuenta.
     await db.collection('userRoles').doc(after.auth_uid).set({
         role: VALID_ROLES.includes(after.role) ? after.role : 'attendee',
         member_id: after.member_id || null,
+        church_id: after.church_id || 'refugio',
         updated_at: new Date().toISOString(),
     }, { merge: true })
 })
@@ -59,12 +65,20 @@ exports.setUserRole = onCall(async (request) => {
     if (!userSnap.exists || userSnap.data().auth_uid !== uid) {
         throw new HttpsError('invalid-argument', 'El usuario indicado no coincide con esa cuenta.')
     }
+    // Multi-iglesia: sin esto, el admin de una iglesia podría cambiar el rol
+    // de alguien de OTRA iglesia con solo conocer/adivinar su userId.
+    const callerChurchId = callerRoleSnap.data().church_id || 'refugio'
+    const targetChurchId = userSnap.data().church_id || 'refugio'
+    if (callerChurchId !== targetChurchId) {
+        throw new HttpsError('permission-denied', 'Ese usuario no pertenece a tu iglesia.')
+    }
 
     const batch = db.batch()
     batch.update(db.collection('users').doc(userId), { role })
     batch.set(db.collection('userRoles').doc(uid), {
         role,
         member_id: userSnap.data().member_id || null,
+        church_id: targetChurchId,
         updated_at: new Date().toISOString(),
         updated_by: request.auth.uid,
     }, { merge: true })
@@ -111,7 +125,12 @@ exports.activateUpcomingServices = onSchedule({ schedule: 'every day 06:00', tim
         tomorrow.setDate(tomorrow.getDate() + 1)
         const targetDate = formatDateParts(tomorrow.getFullYear(), tomorrow.getMonth() + 1, tomorrow.getDate())
 
+        // church_id: 'refugio' hardcodeado a propósito — este cron todavía
+        // solo conoce el horario fijo de Refugio (Etapa 1 de multi-iglesia).
+        // Una iglesia nueva activa su servicio de la semana a mano con el
+        // botón que ya existe en Servicios, hasta que esto itere por iglesia.
         const existingSnap = await db.collection('services')
+            .where('church_id', '==', 'refugio')
             .where('service_type', '==', serviceType)
             .where('service_date', '==', targetDate)
             .limit(1)
@@ -131,11 +150,13 @@ exports.activateUpcomingServices = onSchedule({ schedule: 'every day 06:00', tim
                 ends_at: cfg.ends_at,
                 is_active: false,
                 created_at: new Date().toISOString(),
+                church_id: 'refugio',
             })
             serviceId = newRef.id
         }
 
         const activeSnap = await db.collection('services')
+            .where('church_id', '==', 'refugio')
             .where('service_type', '==', serviceType)
             .where('is_active', '==', true)
             .get()
@@ -211,8 +232,13 @@ async function sendPushToTokens(tokens, title, body, logPrefix) {
 // urgente), y (b) usa last_absence_alert_streak en el propio miembro para no
 // mandar el mismo aviso todos los días mientras el streak no aumente, y para
 // limpiarlo apenas la persona vuelve a asistir (streak vuelve a 0).
+// church_id: 'refugio' hardcodeado a propósito en las 4 consultas de abajo
+// (services/members/attendances/userRoles) — mismo motivo que en
+// activateUpcomingServices: Etapa 1 de multi-iglesia todavía no itera este
+// aviso por iglesia, así que se contiene explícitamente a Refugio para no
+// mezclar streaks/avisos de una iglesia nueva con los suyos.
 async function checkConsecutiveAbsences() {
-    const servicesSnap = await db.collection('services').get()
+    const servicesSnap = await db.collection('services').where('church_id', '==', 'refugio').get()
     const regularServices = servicesSnap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .filter(s => (s.service_type || 'sunday') !== 'buena-tierra')
@@ -220,8 +246,8 @@ async function checkConsecutiveAbsences() {
     if (regularServices.length === 0) return
 
     const [membersSnap, attendancesSnap] = await Promise.all([
-        db.collection('members').get(),
-        db.collection('attendances').get(),
+        db.collection('members').where('church_id', '==', 'refugio').get(),
+        db.collection('attendances').where('church_id', '==', 'refugio').get(),
     ])
 
     const attendedByMember = new Map()
@@ -263,6 +289,7 @@ async function checkConsecutiveAbsences() {
                 body: `${member.full_name || 'Un miembro'} lleva ${streak} cultos seguidos sin asistir.`,
                 member_id: member.id,
                 target_roles: ['admin', 'bienvenida'],
+                church_id: 'refugio',
                 read_by: [],
                 created_at: new Date().toISOString(),
             })
@@ -277,7 +304,10 @@ async function checkConsecutiveAbsences() {
     if (writes > 0) await batch.commit()
     if (newlyFlagged.length === 0) return
 
-    const staffRolesSnap = await db.collection('userRoles').where('role', 'in', ['admin', 'bienvenida']).get()
+    const staffRolesSnap = await db.collection('userRoles')
+        .where('church_id', '==', 'refugio')
+        .where('role', 'in', ['admin', 'bienvenida'])
+        .get()
     const tokens = []
     for (const uidsChunk of chunk(staffRolesSnap.docs.map(d => d.id), 10)) {
         const usersSnap = await db.collection('users').where('auth_uid', 'in', uidsChunk).get()
@@ -311,6 +341,15 @@ exports.onGroupNoticeCreated = onDocumentCreated('groupNotices/{noticeId}', asyn
     const autorRoleSnap = await db.collection('userRoles').doc(autorId).get()
     if (!autorRoleSnap.exists || !ROLES_QUE_PUEDEN_AVISAR.includes(autorRoleSnap.data().role)) {
         console.log(`onGroupNoticeCreated: borrado, autor no autorizado (autorId=${autorId}, existe=${autorRoleSnap.exists}, rol=${autorRoleSnap.exists ? autorRoleSnap.data().role : 'n/a'})`)
+        await event.data.ref.delete().catch(() => {})
+        return
+    }
+    // Multi-iglesia (Etapa 1): Mensajes todavía consulta "users"/"members"
+    // sin filtrar por iglesia, así que solo puede quedar habilitado para
+    // Refugio — el rol "admin" por sí solo no basta para autorizar esto,
+    // porque ya existe más de una iglesia con cuentas admin propias.
+    if ((autorRoleSnap.data().church_id || 'refugio') !== 'refugio') {
+        console.log(`onGroupNoticeCreated: borrado, Mensajes todavía es exclusivo de Refugio (autorId=${autorId})`)
         await event.data.ref.delete().catch(() => {})
         return
     }
@@ -354,6 +393,7 @@ exports.onGroupNoticeCreated = onDocumentCreated('groupNotices/{noticeId}', asyn
         notice_id: event.params.noticeId,
         target_roles: targetMemberIds === null ? VALID_ROLES : [],
         target_member_ids: targetMemberIds || [],
+        church_id: 'refugio',
         read_by: [],
         created_at: new Date().toISOString(),
     }).catch(err => console.error('onGroupNoticeCreated: no se pudo crear la notificación interna', err))
@@ -379,7 +419,14 @@ exports.onAttendanceCreated = onDocumentCreated('attendances/{attendanceId}', as
     console.log(`onAttendanceCreated: member_id=${attendance.member_id} totalAttendances=${totalAttendances}`)
     if (totalAttendances !== 4) return
 
-    const bienvenidaRolesSnap = await db.collection('userRoles').where('role', '==', 'bienvenida').get()
+    // Multi-iglesia: sin filtrar por iglesia, el equipo de Bienvenida de
+    // Refugio recibiría avisos de visitantes de otra iglesia (y viceversa)
+    // solo por compartir el mismo rol de cuenta.
+    const churchId = attendance.church_id || 'refugio'
+    const bienvenidaRolesSnap = await db.collection('userRoles')
+        .where('church_id', '==', churchId)
+        .where('role', '==', 'bienvenida')
+        .get()
     if (bienvenidaRolesSnap.empty) {
         console.log('onAttendanceCreated: nadie con rol bienvenida todavía')
         return
@@ -393,4 +440,117 @@ exports.onAttendanceCreated = onDocumentCreated('attendances/{attendanceId}', as
 
     const memberName = memberSnap.data().full_name || 'Un visitante'
     await sendPushToTokens(tokens, '¡Cuarta visita! 🎉', `${memberName} ya lleva 4 asistencias. Es momento de darle una bienvenida especial.`, 'onAttendanceCreated')
+})
+
+// ---- Multi-iglesia: crear una iglesia nueva con su administrador fundador ----
+// Corre con privilegios de Admin SDK (no pasa por firestore.rules) porque el
+// alta normal de "users" solo permite crearse a sí mismo con role:'attendee'
+// — el fundador de una iglesia necesita nacer directamente como admin de SU
+// iglesia, y eso exige validar cosas (slug único, con al menos un ministerio
+// y un horario) que no conviene repetir en las reglas de seguridad.
+function slugify(text) {
+    // Quita marcas de acento combinadas (U+0300-U+036F) tras normalize('NFD')
+    // usando un rango numerico (codePointAt), no un caracter literal en el
+    // regex -- un literal asi resulto fragil en la deteccion de duplicados
+    // de miembros, esta misma sesion: el editor podia corromperlo en silencio.
+    const noAccents = (text || '')
+        .toString().toLowerCase().normalize('NFD')
+        .split('')
+        .filter(ch => { const c = ch.codePointAt(0); return !(c >= 0x0300 && c <= 0x036f) })
+        .join('')
+    return noAccents
+        .replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-').replace(/-+/g, '-')
+}
+
+exports.createChurch = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'Debes iniciar sesión.')
+    }
+    const { name, tagline, logoUrl, primaryColor, location, timezone, serviceSchedule, ministries, adminName } = request.data || {}
+    if (typeof name !== 'string' || !name.trim()) {
+        throw new HttpsError('invalid-argument', 'Falta el nombre de la iglesia.')
+    }
+    if (!Array.isArray(ministries) || ministries.length === 0) {
+        throw new HttpsError('invalid-argument', 'Agrega al menos un ministerio.')
+    }
+    if (!Array.isArray(serviceSchedule) || serviceSchedule.length === 0) {
+        throw new HttpsError('invalid-argument', 'Agrega al menos un horario de culto.')
+    }
+
+    const uid = request.auth.uid
+    const email = (request.auth.token.email || '').trim().toLowerCase()
+    if (!email) {
+        throw new HttpsError('failed-precondition', 'Tu cuenta necesita un correo.')
+    }
+
+    // Una misma cuenta no puede fundar dos iglesias.
+    const existingLookup = await db.collection('userLookup').doc(email).get()
+    if (existingLookup.exists) {
+        throw new HttpsError('already-exists', 'Esta cuenta ya pertenece a una iglesia.')
+    }
+
+    const baseSlug = slugify(name) || 'iglesia'
+    let slug = baseSlug
+    let suffix = 1
+    // eslint-disable-next-line no-await-in-loop
+    while ((await db.collection('churches').where('slug', '==', slug).limit(1).get()).size > 0) {
+        suffix++
+        slug = `${baseSlug}-${suffix}`
+    }
+
+    const ministriesWithFields = ministries.map((m, i) => ({
+        id: m.id || `ministerio-${i + 1}`,
+        name: String(m.name || `Ministerio ${i + 1}`),
+        field: m.field || `ministry_${m.id || i + 1}`,
+        icon: m.icon || 'Users',
+    }))
+
+    const now = new Date().toISOString()
+    const churchRef = db.collection('churches').doc()
+    await churchRef.set({
+        name: name.trim(),
+        slug,
+        tagline: tagline || '',
+        logo_url: logoUrl || null,
+        primary_color: primaryColor || '#2696D2',
+        location: location || null,
+        timezone: timezone || 'America/Santiago',
+        service_schedule: serviceSchedule,
+        ministries: ministriesWithFields,
+        status: 'pending',
+        owner_uid: uid,
+        created_at: now,
+    })
+
+    const displayName = adminName || request.auth.token.name || email
+    const memberRef = db.collection('members').doc()
+    await memberRef.set({
+        full_name: displayName,
+        email,
+        phone: '',
+        birth_date: '',
+        gender: '',
+        civil_status: '',
+        member_type: 'Líder',
+        photo_url: request.auth.token.picture || null,
+        is_active: true,
+        created_at: now,
+        church_id: churchRef.id,
+    })
+
+    const userRef = db.collection('users').doc()
+    await userRef.set({
+        email,
+        role: 'admin',
+        name: displayName,
+        member_id: memberRef.id,
+        photo_url: request.auth.token.picture || null,
+        auth_uid: uid,
+        church_id: churchRef.id,
+    })
+    // syncUserRoleOnUserWrite refleja esto en userRoles automáticamente.
+
+    await db.collection('userLookup').doc(email).set({ user_id: userRef.id, church_id: churchRef.id })
+
+    return { ok: true, churchId: churchRef.id, slug }
 })

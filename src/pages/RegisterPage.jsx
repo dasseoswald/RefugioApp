@@ -1,9 +1,10 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext.jsx'
+import { useState, useEffect } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { useAuth, setPendingRegistrationChurchSlug } from '../context/AuthContext.jsx'
 import { User, Mail, Lock, ArrowRight, Eye, EyeOff, CheckCircle2 } from 'lucide-react'
 import { isInAppBrowser } from '../lib/installPrompt.js'
 import InAppBrowserBanner from '../components/shared/InAppBrowserBanner.jsx'
+import { getChurchBySlug } from '../data/mockData.js'
 import logo from '../assets/logo.png'
 
 function GoogleIcon() {
@@ -19,6 +20,8 @@ function GoogleIcon() {
 
 export default function RegisterPage() {
     const { register, loginWithGoogle } = useAuth()
+    const { churchSlug } = useParams()
+    const [targetChurch, setTargetChurch] = useState(null)
 
     const [name, setName] = useState('')
     const [email, setEmail] = useState('')
@@ -28,6 +31,18 @@ export default function RegisterPage() {
     const [error, setError] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     const [done, setDone] = useState(false)
+
+    // /registro/:churchSlug: link propio de una iglesia para que sus
+    // miembros se registren directamente en ELLA (en vez del valor por
+    // defecto de /register). Se guarda en un módulo compartido con
+    // AuthContext porque el alta real la termina el listener
+    // onAuthStateChanged, no este componente.
+    useEffect(() => {
+        setPendingRegistrationChurchSlug(churchSlug || null)
+        if (churchSlug) {
+            getChurchBySlug(churchSlug).then(setTargetChurch)
+        }
+    }, [churchSlug])
 
     const handleSubmit = async (event) => {
         event.preventDefault()
@@ -114,6 +129,12 @@ export default function RegisterPage() {
 
                         <h2 className="text-2xl font-bold text-[#111111] mb-1">Crear cuenta</h2>
                         <p className="text-[#6E6E6E] text-sm mb-8">Rápido y sin complicaciones</p>
+
+                        {churchSlug && (
+                            <div className="mb-6 px-4 py-3 rounded-xl bg-[#E8F4FC] text-sm text-[#111111]">
+                                Te estás registrando en <strong>{targetChurch?.name || 'esta iglesia'}</strong>.
+                            </div>
+                        )}
 
                         <InAppBrowserBanner />
 

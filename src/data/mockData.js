@@ -7,11 +7,61 @@
 import { db } from '../firebase.js'
 import { collection, doc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, onSnapshot, writeBatch, arrayUnion, query, where, orderBy, limit } from 'firebase/firestore'
 
-// Ubicación de la iglesia (Un Refugio para la Familia, Coelemu) para el
-// registro automático de asistencia por GPS. El radio incluye margen para
-// la imprecisión típica del GPS de un celular (10-50m).
-export const CHURCH_LOCATION = { lat: -36.4905608, lng: -72.7041862 }
-export const CHECKIN_RADIUS_METERS = 100
+// Ubicación de la iglesia (por defecto la de Un Refugio para la Familia,
+// Coelemu) para el registro automático de asistencia por GPS. El radio
+// incluye margen para la imprecisión típica del GPS de un celular (10-50m).
+// Son `let` porque applyChurchProfile() los reemplaza por los de la iglesia
+// que corresponda a la sesión actual (ver setCurrentChurchId más abajo).
+export let CHURCH_LOCATION = { lat: -36.4905608, lng: -72.7041862 }
+export let CHECKIN_RADIUS_METERS = 100
+
+// ---- Multi-iglesia: iglesia actual de la sesión ----
+// Todas las colecciones "núcleo" (miembros, usuarios, servicios,
+// asistencias, hojas de vida/notas) se sincronizan filtradas por esta
+// iglesia — ver startCoreDataSync más abajo. Arranca en 'refugio' porque es
+// el comportamiento de hoy (login/registro sin parámetro) hasta que
+// AuthContext la resuelva de verdad para la sesión que inició.
+let CURRENT_CHURCH_ID = 'refugio'
+export function getCurrentChurchId() { return CURRENT_CHURCH_ID }
+export function setCurrentChurchId(id) { CURRENT_CHURCH_ID = id || 'refugio' }
+
+function churchDocRef(id) { return doc(db, 'churches', id) }
+
+export async function getChurchBySlug(slug) {
+    if (!slug) return null
+    const snap = await getDocs(query(collection(db, 'churches'), where('slug', '==', slug), limit(1)))
+    if (snap.empty) return null
+    const d = snap.docs[0]
+    return { id: d.id, ...d.data() }
+}
+
+export function subscribeChurchProfile(churchId, callback) {
+    if (!churchId) { callback(null); return () => {} }
+    return onSnapshot(churchDocRef(churchId), (snap) => {
+        callback(snap.exists() ? { id: snap.id, ...snap.data() } : null)
+    }, (err) => console.error('Error sincronizando el perfil de la iglesia', err))
+}
+
+export async function getChurchProfile(churchId) {
+    if (!churchId) return null
+    const snap = await getDoc(churchDocRef(churchId))
+    return snap.exists() ? { id: snap.id, ...snap.data() } : null
+}
+
+// Aplica los datos propios de una iglesia (ministerios, ubicación de
+// check-in) a las variables globales que el resto de la app ya usa. Se
+// llama una vez, al terminar de cargar la sesión, ANTES de que cualquier
+// pantalla se renderice — así Refugio no necesita ningún cambio (sus
+// valores por defecto ya son los correctos) y una iglesia nueva ve los
+// suyos desde la primera pantalla.
+export function applyChurchProfile(church) {
+    if (!church) return
+    if (church.ministries?.length) OPERATIONAL_GROUPS = church.ministries
+    if (church.location?.lat != null && church.location?.lng != null) {
+        CHURCH_LOCATION = { lat: church.location.lat, lng: church.location.lng }
+        if (church.location.radius_m) CHECKIN_RADIUS_METERS = church.location.radius_m
+    }
+}
 
 // Distancia entre dos coordenadas GPS en metros (fórmula de Haversine).
 export function distanceInMeters(lat1, lng1, lat2, lng2) {
@@ -28,7 +78,12 @@ export function distanceInMeters(lat1, lng1, lat2, lng2) {
 // debe realizar: 1=Bienvenida, 2=Folleto, 3=Charla de 5 min, 4=Kit de bienvenida.
 export const WELCOME_CHECK_ACTIONS = ['Bienvenida', 'Folleto', 'Charla de 5 minutos', 'Kit de bienvenida']
 
-export const OPERATIONAL_GROUPS = [
+// Los ministerios de Refugio son el valor por defecto (arranca la app con
+// esto antes de saber a qué iglesia pertenece la sesión, y es lo que usa
+// Refugio mismo). Para una iglesia nueva, setOperationalGroupsFromChurch()
+// lo reemplaza por los ministerios que definió al crearla — por eso es
+// `let` y no `const`.
+export let OPERATIONAL_GROUPS = [
     { id: 'escuela-discipulo', name: 'Escuela del Discípulo', field: 'escuela_discipulo', icon: 'BookOpen' },
     { id: 'buena-tierra', name: 'Buena Tierra', field: 'buena_tierra', icon: 'Sprout' },
     { id: 'jovenes', name: 'Jóvenes', field: 'grupo_jovenes', icon: 'Users' },
@@ -267,7 +322,7 @@ export function patchMember(id, patch) {
 
 export function createMember(data) {
     const id = `mem-${Date.now()}-${Math.floor(Math.random() * 1000)}`
-    const newMember = { ...data, id, email: (data.email || '').trim().toLowerCase(), created_at: new Date().toISOString(), is_active: true }
+    const newMember = { ...data, id, email: (data.email || '').trim().toLowerCase(), created_at: new Date().toISOString(), is_active: true, church_id: data.church_id || CURRENT_CHURCH_ID }
 
     // Auto-asignación a múltiples ministerios
     if (data.groups && Array.isArray(data.groups)) {
@@ -496,7 +551,7 @@ function attendanceDocRef(id) { return doc(db, 'attendances', id) }
 
 export function createService(data) {
     const id = `svc-${Date.now()}-${Math.floor(Math.random() * 1000)}`
-    const newService = { service_type: 'sunday', ...data, id, is_active: false, created_at: new Date().toISOString() }
+    const newService = { service_type: 'sunday', ...data, id, is_active: false, created_at: new Date().toISOString(), church_id: CURRENT_CHURCH_ID }
     SERVICES = [...SERVICES, newService]
     const { id: _id, ...rest } = newService
     setDoc(serviceDocRef(id), rest).catch(err => console.error('No se pudo guardar el servicio', err))
@@ -591,6 +646,7 @@ export function registerAttendance(memberId, serviceId, method = 'manual', regis
         registered_by: registeredBy,
         notes: null,
         is_cancelled: false,
+        church_id: CURRENT_CHURCH_ID,
     }
     ATTENDANCES = [...ATTENDANCES, attendance]
     const { id: _id, ...rest } = attendance
@@ -902,10 +958,12 @@ export function createUser(data) {
         name: data.name,
         member_id: data.member_id || null,
         photo_url: null,
+        church_id: CURRENT_CHURCH_ID,
     }
     USERS = [...USERS, newUser]
     const { id, ...rest } = newUser
     setDoc(userDocRef(id), rest).catch(err => console.error('No se pudo guardar el usuario', err))
+    setDoc(doc(db, 'userLookup', email), { user_id: id, church_id: CURRENT_CHURCH_ID }).catch(err => console.error('No se pudo indexar el usuario', err))
     return { data: newUser }
 }
 
@@ -1191,7 +1249,11 @@ export function saveFcmToken(userId, token) {
 // consigue su auth_uid), y la función setUserRole la actualiza cuando un
 // administrador cambia el rol de alguien (ver src/pages/admin/UsersPage.jsx).
 
-export function createOrGetUserForFirebaseAccount({ uid, email: rawEmail, displayName, photoURL }) {
+// churchId: a qué iglesia pertenece este alta (ya resuelta por AuthContext
+// antes de llamar esto — ver resolveChurchIdForLogin). Si la cuenta ya
+// existía, se ignora (una cuenta no cambia de iglesia solo por iniciar
+// sesión desde otro link).
+export function createOrGetUserForFirebaseAccount({ uid, email: rawEmail, displayName, photoURL, churchId }) {
     const email = (rawEmail || '').trim().toLowerCase()
     const existingUser = getUserByEmail(email)
     if (existingUser) {
@@ -1219,6 +1281,7 @@ export function createOrGetUserForFirebaseAccount({ uid, email: rawEmail, displa
             member_type: 'Visitante',
             photo_url: photoURL || null,
             groups: [],
+            church_id: churchId,
         })
     }
 
@@ -1230,11 +1293,31 @@ export function createOrGetUserForFirebaseAccount({ uid, email: rawEmail, displa
         member_id: member.id,
         photo_url: photoURL || null,
         auth_uid: uid || null,
+        church_id: churchId,
     }
     USERS = [...USERS, newUser]
     const { id, ...rest } = newUser
     setDoc(userDocRef(id), rest).catch(err => console.error('No se pudo guardar el usuario', err))
+    setDoc(doc(db, 'userLookup', email), { user_id: id, church_id: churchId }).catch(err => console.error('No se pudo indexar el usuario', err))
     return { ...newUser }
+}
+
+// Resuelve a qué iglesia pertenece (o va a pertenecer) una sesión, SIN
+// depender de ninguna caché sincronizada de otras iglesias — evita bajar el
+// directorio de usuarios de todas las iglesias al navegador solo para hacer
+// esta búsqueda. pendingChurchSlug viene de una URL /registro/:slug (alta
+// nueva en una iglesia específica); si no hay nada de eso, se preserva el
+// comportamiento de siempre (login/registro sin parámetro → Refugio).
+export async function resolveChurchIdForLogin(email, pendingChurchSlug) {
+    if (email) {
+        const lookupSnap = await getDoc(doc(db, 'userLookup', email))
+        if (lookupSnap.exists()) return lookupSnap.data().church_id || 'refugio'
+    }
+    if (pendingChurchSlug) {
+        const church = await getChurchBySlug(pendingChurchSlug)
+        if (church) return church.id
+    }
+    return 'refugio'
 }
 
 // Nota: para cambiar el ROL de una cuenta que ya inició sesión, usar la
@@ -2651,12 +2734,13 @@ document.addEventListener('visibilitychange', () => {
 })
 
 // ---- Sincronización con Firestore (Miembros y Usuarios) ----
-// MEMBERS y USERS se mantienen en tiempo real con Firestore, compartidos
-// entre todos los dispositivos. La primera vez que la colección está vacía,
-// se siembra con los datos base definidos arriba.
+// MEMBERS y USERS se mantienen en tiempo real con Firestore, filtrados por
+// la iglesia de la sesión actual (ver setCurrentChurchId/CURRENT_CHURCH_ID
+// más arriba) — así el navegador de una iglesia nunca baja datos de otra.
 // Las reglas de seguridad exigen un usuario autenticado, así que la
-// suscripción se inicia recién cuando AuthContext confirma el login
-// (startCoreDataSync), no al cargar el módulo.
+// suscripción se inicia recién cuando AuthContext confirma el login y ya
+// resolvió a qué iglesia pertenece (startCoreDataSync), no al cargar el
+// módulo.
 
 let resolveCoreDataReady
 export const coreDataReadyPromise = new Promise((resolve) => { resolveCoreDataReady = resolve })
@@ -2665,31 +2749,21 @@ let usersFirstLoad = true
 let profilesFirstLoad = true
 let profileNotesFirstLoad = true
 let prayerRequestsFirstLoad = true
-let noticesFirstLoad = true
 let servicesFirstLoad = true
 let attendancesFirstLoad = true
 let coreSyncStarted = false
 
 function checkCoreDataReady() {
-    if (!membersFirstLoad && !usersFirstLoad && !profilesFirstLoad && !noticesFirstLoad && !servicesFirstLoad && !attendancesFirstLoad) resolveCoreDataReady()
+    if (!membersFirstLoad && !usersFirstLoad && !profilesFirstLoad && !servicesFirstLoad && !attendancesFirstLoad) resolveCoreDataReady()
 }
 
-export function startCoreDataSync() {
+export function startCoreDataSync(churchId) {
     if (coreSyncStarted) return
     coreSyncStarted = true
+    setCurrentChurchId(churchId)
+    const cid = CURRENT_CHURCH_ID
 
-    onSnapshot(collection(db, 'members'), async (snap) => {
-        if (snap.empty && membersFirstLoad) {
-            try {
-                const batch = writeBatch(db)
-                MEMBERS.forEach(m => {
-                    const { id, ...rest } = m
-                    batch.set(doc(db, 'members', id), rest)
-                })
-                await batch.commit()
-            } catch (e) { console.error('No se pudieron sembrar los miembros iniciales', e) }
-            return
-        }
+    onSnapshot(query(collection(db, 'members'), where('church_id', '==', cid)), (snap) => {
         MEMBERS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         membersFirstLoad = false
         checkCoreDataReady()
@@ -2699,18 +2773,7 @@ export function startCoreDataSync() {
         checkCoreDataReady()
     })
 
-    onSnapshot(collection(db, 'users'), async (snap) => {
-        if (snap.empty && usersFirstLoad) {
-            try {
-                const batch = writeBatch(db)
-                USERS.forEach(u => {
-                    const { id, ...rest } = u
-                    batch.set(doc(db, 'users', id), rest)
-                })
-                await batch.commit()
-            } catch (e) { console.error('No se pudieron sembrar los usuarios iniciales', e) }
-            return
-        }
+    onSnapshot(query(collection(db, 'users'), where('church_id', '==', cid)), (snap) => {
         USERS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         usersFirstLoad = false
         checkCoreDataReady()
@@ -2720,17 +2783,7 @@ export function startCoreDataSync() {
         checkCoreDataReady()
     })
 
-    onSnapshot(collection(db, 'memberProfiles'), async (snap) => {
-        if (snap.empty && profilesFirstLoad && Object.keys(MEMBER_PROFILES).length > 0) {
-            try {
-                const batch = writeBatch(db)
-                Object.entries(MEMBER_PROFILES).forEach(([memberId, profile]) => {
-                    batch.set(doc(db, 'memberProfiles', memberId), profile)
-                })
-                await batch.commit()
-            } catch (e) { console.error('No se pudieron sembrar las hojas de vida iniciales', e) }
-            return
-        }
+    onSnapshot(query(collection(db, 'memberProfiles'), where('church_id', '==', cid)), (snap) => {
         const next = {}
         snap.forEach(d => { next[d.id] = d.data() })
         MEMBER_PROFILES = next
@@ -2744,19 +2797,8 @@ export function startCoreDataSync() {
 
     // No bloquea checkCoreDataReady: son notas de staff sobre un miembro,
     // secundarias frente a los datos que el resto de la app necesita para
-    // arrancar (igual que alabanzaAssignments/alabanzaSongs).
-    onSnapshot(collection(db, 'profileNotes'), async (snap) => {
-        if (snap.empty && profileNotesFirstLoad && PROFILE_NOTES.length > 0) {
-            try {
-                const batch = writeBatch(db)
-                PROFILE_NOTES.forEach(n => {
-                    const { id, ...rest } = n
-                    batch.set(doc(db, 'profileNotes', id), rest)
-                })
-                await batch.commit()
-            } catch (e) { console.error('No se pudieron sembrar las notas iniciales', e) }
-            return
-        }
+    // arrancar.
+    onSnapshot(query(collection(db, 'profileNotes'), where('church_id', '==', cid)), (snap) => {
         PROFILE_NOTES = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         profileNotesFirstLoad = false
     }, (err) => {
@@ -2764,53 +2806,9 @@ export function startCoreDataSync() {
         profileNotesFirstLoad = false
     })
 
-    // No bloquea checkCoreDataReady: las peticiones de oración/gratitud no
-    // son necesarias para que el resto de la app arranque.
-    onSnapshot(collection(db, 'prayerRequests'), async (snap) => {
-        if (snap.empty && prayerRequestsFirstLoad && PRAYER_REQUESTS.length > 0) {
-            try {
-                const batch = writeBatch(db)
-                PRAYER_REQUESTS.forEach(p => {
-                    const { id, ...rest } = p
-                    batch.set(doc(db, 'prayerRequests', id), rest)
-                })
-                await batch.commit()
-            } catch (e) { console.error('No se pudieron sembrar las peticiones iniciales', e) }
-            return
-        }
-        PRAYER_REQUESTS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        prayerRequestsFirstLoad = false
-    }, (err) => {
-        console.error('Error sincronizando peticiones de oración', err)
-        prayerRequestsFirstLoad = false
-    })
-
-    onSnapshot(collection(db, 'groupNotices'), async (snap) => {
-        if (snap.empty && noticesFirstLoad && GROUP_NOTICES.length > 0) {
-            try {
-                const batch = writeBatch(db)
-                GROUP_NOTICES.forEach(n => {
-                    const { id, ...rest } = n
-                    batch.set(doc(db, 'groupNotices', id), rest)
-                })
-                await batch.commit()
-            } catch (e) { console.error('No se pudieron sembrar los avisos iniciales', e) }
-            return
-        }
-        GROUP_NOTICES = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        noticesFirstLoad = false
-        checkCoreDataReady()
-    }, (err) => {
-        console.error('Error sincronizando avisos', err)
-        noticesFirstLoad = false
-        checkCoreDataReady()
-    })
-
-    // Servicios y asistencias: a propósito NO se siembran los datos de
-    // ejemplo (eran ficticios, generados solo para la demo local) — la
-    // colección arranca vacía en Firestore y se llena con el uso real de
-    // la iglesia de aquí en adelante.
-    onSnapshot(collection(db, 'services'), (snap) => {
+    // Servicios y asistencias: la colección arranca vacía para una iglesia
+    // nueva y se llena con el uso real de ahí en adelante.
+    onSnapshot(query(collection(db, 'services'), where('church_id', '==', cid)), (snap) => {
         SERVICES = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         servicesFirstLoad = false
         checkCoreDataReady()
@@ -2820,7 +2818,7 @@ export function startCoreDataSync() {
         checkCoreDataReady()
     })
 
-    onSnapshot(collection(db, 'attendances'), (snap) => {
+    onSnapshot(query(collection(db, 'attendances'), where('church_id', '==', cid)), (snap) => {
         ATTENDANCES = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         attendancesFirstLoad = false
         checkCoreDataReady()
@@ -2830,24 +2828,47 @@ export function startCoreDataSync() {
         checkCoreDataReady()
     })
 
-    // No bloquean checkCoreDataReady: son datos secundarios (calendario y
-    // repertorio de Alabanza), no algo que el resto de la app necesite para
-    // arrancar.
-    onSnapshot(collection(db, 'alabanzaAssignments'), (snap) => {
-        ALABANZA_ASSIGNMENTS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-    }, (err) => {
-        console.error('Error sincronizando asignaciones de alabanza', err)
-    })
+    // ---- Funciones todavía exclusivas de Refugio (Etapa 1 de multi-iglesia) ----
+    // prayerRequests, groupNotices (Mensajes) y Alabanza no tienen church_id
+    // todavía — en vez de sincronizarlas para cualquier iglesia (lo que
+    // bajaría al navegador datos de Refugio que no le corresponden a nadie
+    // más), se restringen a la sesión de Refugio mismo. El resto de la app ya
+    // oculta la navegación a estas pantallas para cualquier otra iglesia
+    // (ver Sidebar.jsx, refugioOnly) — esto cierra también la sincronización
+    // de los datos, no solo el acceso visual.
+    if (cid === 'refugio') {
+        onSnapshot(collection(db, 'prayerRequests'), (snap) => {
+            PRAYER_REQUESTS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+            prayerRequestsFirstLoad = false
+        }, (err) => {
+            console.error('Error sincronizando peticiones de oración', err)
+            prayerRequestsFirstLoad = false
+        })
 
-    onSnapshot(collection(db, 'alabanzaSongs'), (snap) => {
-        ALABANZA_SONGS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-    }, (err) => {
-        console.error('Error sincronizando repertorio de alabanza', err)
-    })
+        onSnapshot(collection(db, 'groupNotices'), (snap) => {
+            GROUP_NOTICES = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        }, (err) => {
+            console.error('Error sincronizando avisos', err)
+        })
 
-    onSnapshot(collection(db, 'alabanzaSetlists'), (snap) => {
-        ALABANZA_SETLISTS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-    }, (err) => {
-        console.error('Error sincronizando el repertorio de los servicios', err)
-    })
+        onSnapshot(collection(db, 'alabanzaAssignments'), (snap) => {
+            ALABANZA_ASSIGNMENTS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        }, (err) => {
+            console.error('Error sincronizando asignaciones de alabanza', err)
+        })
+
+        onSnapshot(collection(db, 'alabanzaSongs'), (snap) => {
+            ALABANZA_SONGS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        }, (err) => {
+            console.error('Error sincronizando repertorio de alabanza', err)
+        })
+
+        onSnapshot(collection(db, 'alabanzaSetlists'), (snap) => {
+            ALABANZA_SETLISTS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        }, (err) => {
+            console.error('Error sincronizando el repertorio de los servicios', err)
+        })
+    } else {
+        prayerRequestsFirstLoad = false
+    }
 }

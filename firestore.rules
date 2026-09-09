@@ -24,6 +24,14 @@ service cloud.firestore {
       return isMiembro() && myRoleDoc().role == role;
     }
 
+    // ---------- Multi-iglesia ----------
+    // A qué iglesia pertenece quien llama, según su propio userRoles (que la
+    // Cloud Function syncUserRoleOnUserWrite mantiene igual que el church_id
+    // guardado en su documento de "users").
+    function myChurchId() {
+      return myRoleDoc().church_id;
+    }
+
     function isStaff() {
       return hasRole('admin') || hasRole('controller');
     }
@@ -116,49 +124,55 @@ service cloud.firestore {
     // no por el uid de Firebase Auth, por lo que la verificación de dueño se
     // hace contra el campo auth_uid guardado en el propio documento.
     match /users/{docId} {
-      allow read: if isMiembro();
+      allow read: if isMiembro() && resource.data.church_id == myChurchId();
       // Alta propia: solo puede crear su propio documento (auth_uid debe
-      // coincidir) y con rol "attendee" — cualquier otro rol requiere un
-      // administrador. Un administrador puede además precrear la cuenta de
-      // otra persona (p. ej. antes de que esa persona inicie sesión por
-      // primera vez).
+      // coincidir), con rol "attendee" y una iglesia real — cualquier otro
+      // rol requiere un administrador (de la MISMA iglesia; el fundador de
+      // una iglesia nueva se crea aparte, vía la función createChurch con
+      // privilegios de servidor, no por este camino). Un administrador
+      // puede además precrear la cuenta de otra persona de su iglesia.
       allow create: if isSignedIn() && (
-        hasRole('admin') ||
-        (request.resource.data.auth_uid == request.auth.uid && request.resource.data.role == 'attendee')
+        (hasRole('admin') && request.resource.data.church_id == myChurchId()) ||
+        (request.resource.data.auth_uid == request.auth.uid && request.resource.data.role == 'attendee'
+          && exists(/databases/$(database)/documents/churches/$(request.resource.data.church_id)))
       );
       // Actualización propia (latido de conexión, foto, tokens de
-      // notificación) o por un administrador. Se admite además "reclamar"
-      // una cuenta creada antes de que existiera el campo auth_uid,
-      // verificando que el correo coincida con el de la sesión actual.
+      // notificación) o por un administrador de la misma iglesia. Se admite
+      // además "reclamar" una cuenta creada antes de que existiera el campo
+      // auth_uid, verificando que el correo coincida con el de la sesión.
       allow update: if isSignedIn() && (
-        hasRole('admin') ||
+        (hasRole('admin') && resource.data.church_id == myChurchId()) ||
         resource.data.get('auth_uid', null) == request.auth.uid ||
         (resource.data.get('auth_uid', null) == null
           && resource.data.get('email', null) == request.auth.token.get('email', null))
       );
-      allow delete: if hasRole('admin');
+      allow delete: if hasRole('admin') && resource.data.church_id == myChurchId();
     }
 
     // ---------- Miembros ----------
     match /members/{docId} {
-      allow read: if isMiembro();
+      allow read: if isMiembro() && resource.data.church_id == myChurchId();
       // Alta abierta: necesaria para que el registro de una cuenta nueva
-      // pueda crear su propio miembro. La modificación de miembros
-      // existentes queda reservada al equipo (admin/controlador), o a quien
-      // la matriz de permisos le haya activado "Gestión de miembros".
-      allow create: if isSignedIn();
-      allow update, delete: if isStaff() || hasDynamicPermission('manage_members');
+      // pueda crear su propio miembro (todavía sin userRoles) — se exige
+      // eso sí que la iglesia indicada exista de verdad. La modificación de
+      // miembros existentes queda reservada al equipo de esa misma iglesia
+      // (admin/controlador), o a quien la matriz de permisos le haya
+      // activado "Gestión de miembros".
+      allow create: if isSignedIn()
+        && exists(/databases/$(database)/documents/churches/$(request.resource.data.church_id));
+      allow update, delete: if isMiembro() && resource.data.church_id == myChurchId()
+        && (isStaff() || hasDynamicPermission('manage_members'));
     }
 
     // ---------- Asistencia ----------
     // Un miembro solo puede registrar SU PROPIA asistencia (el member_id del
     // documento debe coincidir con el que tiene vinculado en userRoles) —
     // así el registro por GPS o código QR no permite marcar presente a
-    // nombre de otra persona. El equipo puede registrar a cualquiera
-    // (registro manual en la puerta, visitantes sin cuenta, etc.).
+    // nombre de otra persona. El equipo puede registrar a cualquiera de su
+    // misma iglesia (registro manual en la puerta, visitantes sin cuenta).
     match /attendances/{docId} {
-      allow read: if isMiembro();
-      allow create: if isSignedIn() && (
+      allow read: if isMiembro() && resource.data.church_id == myChurchId();
+      allow create: if isSignedIn() && request.resource.data.church_id == myChurchId() && (
         isStaff() ||
         request.resource.data.member_id == myRoleDoc().member_id ||
         hasDynamicPermission('register_others_attendance') ||
@@ -168,7 +182,7 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/members/$(request.resource.data.member_id)).data.get('buena_tierra_class', null) != null
           && isBuenaTierraTeacherOf(get(/databases/$(database)/documents/members/$(request.resource.data.member_id)).data.buena_tierra_class))
       );
-      allow update, delete: if isStaff();
+      allow update, delete: if isMiembro() && resource.data.church_id == myChurchId() && isStaff();
     }
 
     // ---------- Avisos (disparan notificaciones push institucionales) ----------
@@ -270,8 +284,11 @@ service cloud.firestore {
     // escribir) — se cierra a staff o a quien tenga "Gestionar servicios"
     // activado en la matriz de permisos.
     match /services/{docId} {
-      allow read: if isMiembro();
-      allow write: if isStaff() || hasDynamicPermission('manage_services');
+      allow read: if isMiembro() && resource.data.church_id == myChurchId();
+      allow create: if isMiembro() && request.resource.data.church_id == myChurchId()
+        && (isStaff() || hasDynamicPermission('manage_services'));
+      allow update, delete: if isMiembro() && resource.data.church_id == myChurchId()
+        && (isStaff() || hasDynamicPermission('manage_services'));
     }
 
     // ---------- Configuración (matriz de permisos, etc.) ----------
@@ -290,9 +307,15 @@ service cloud.firestore {
     // todos") o por member_id (target_member_ids, para avisos de un
     // ministerio específico que no corresponde a un rol de cuenta) — se
     // acepta cualquiera de los dos caminos.
+    // church_id: multi-iglesia — un aviso de Refugio no debe ser legible por
+    // el admin/bienvenida de otra iglesia solo por compartir el mismo rol.
+    // Los avisos de hoy (inasistencias, Mensajes) son todos de Refugio, así
+    // que el default 'refugio' preserva el comportamiento actual.
     function esDestinatarioDeNotificacion(data) {
-      return data.target_roles.hasAny([myRoleDoc().role])
-        || (myRoleDoc().member_id != null && data.get('target_member_ids', []).hasAny([myRoleDoc().member_id]));
+      return data.get('church_id', 'refugio') == myChurchId() && (
+        data.target_roles.hasAny([myRoleDoc().role])
+        || (myRoleDoc().member_id != null && data.get('target_member_ids', []).hasAny([myRoleDoc().member_id]))
+      );
     }
     match /notifications/{docId} {
       allow read: if isMiembro() && esDestinatarioDeNotificacion(resource.data);
@@ -326,6 +349,32 @@ service cloud.firestore {
       }
     }
 
+    // ---------- Multi-iglesia: perfil de cada iglesia ----------
+    // Lectura pública (a propósito): hace falta mostrar nombre/logo antes de
+    // iniciar sesión (login, /registro/:slug). La creación va SOLO por la
+    // función createChurch (Admin SDK, valida slug único y arma el resto de
+    // la iglesia de forma atómica) — un cliente nunca crea esto directo.
+    match /churches/{churchId} {
+      allow read: if true;
+      allow create: if false;
+      allow update: if isMiembro() && myChurchId() == churchId && hasRole('admin');
+      allow delete: if false;
+    }
+
+    // ---------- Multi-iglesia: índice correo → (usuario, iglesia) ----------
+    // Documento mínimo, uno por correo, que permite al login resolver a qué
+    // iglesia pertenece una cuenta SIN tener que sincronizar el directorio
+    // completo de usuarios de todas las iglesias al navegador (ver
+    // resolveChurchIdForLogin en mockData.js). Cada quien solo puede
+    // leer/escribir el que corresponde a su PROPIO correo autenticado.
+    match /userLookup/{email} {
+      allow get: if isSignedIn() && request.auth.token.email == email;
+      allow create, update: if isSignedIn() && request.auth.token.email == email
+        && request.resource.data.user_id is string && request.resource.data.church_id is string;
+      allow delete: if false;
+      allow list: if false;
+    }
+
     // ---------- Calendario de actividades ----------
     // Mismo criterio que Eventos: cualquier líder de ministerio (o el
     // equipo) puede agregar una actividad; editar/borrar solo staff o quien
@@ -341,7 +390,7 @@ service cloud.firestore {
     // aprobado (no cualquier cuenta de Google autenticada).
     match /{collection}/{docId} {
       allow read, write: if isMiembro()
-        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'groupSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings', 'activities', 'services', 'settings', 'notifications', 'conversations']);
+        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'groupSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings', 'activities', 'services', 'settings', 'notifications', 'conversations', 'churches', 'userLookup']);
     }
   }
 }
