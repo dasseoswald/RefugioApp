@@ -247,6 +247,18 @@ service cloud.firestore {
       allow write: if hasRole('admin');
     }
 
+    // ---------- Refugios (grupos pequeños / células) ----------
+    // Mismo criterio que la página (RefugiosPage.jsx): solo admin/controlador
+    // gestionan los refugios y quién está inscrito en cuál.
+    match /refugios/{docId} {
+      allow read: if isMiembro();
+      allow write: if isStaff();
+    }
+    match /refugioEnrollments/{memberId} {
+      allow read: if isMiembro();
+      allow write: if isStaff();
+    }
+
     // ---------- Ofrenda de ministerio (registro interno, no confidencial) ----------
     match /ministryOfferings/{docId} {
       allow read: if isMiembro();
@@ -390,7 +402,7 @@ service cloud.firestore {
     // aprobado (no cualquier cuenta de Google autenticada).
     match /{collection}/{docId} {
       allow read, write: if isMiembro()
-        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'groupSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings', 'activities', 'services', 'settings', 'notifications', 'conversations', 'churches', 'userLookup']);
+        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'groupSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings', 'activities', 'services', 'settings', 'notifications', 'conversations', 'churches', 'userLookup', 'refugios', 'refugioEnrollments']);
     }
   }
 }

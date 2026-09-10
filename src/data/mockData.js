@@ -404,9 +404,10 @@ export function deleteMember(id) {
     for (let i = ESCUELA_ATTENDANCES.length - 1; i >= 0; i--) {
         if (ESCUELA_ATTENDANCES[i].member_id === id) ESCUELA_ATTENDANCES.splice(i, 1)
     }
-    for (let i = REFUGIO_ENROLLMENTS.length - 1; i >= 0; i--) {
-        if (REFUGIO_ENROLLMENTS[i].member_id === id) REFUGIO_ENROLLMENTS.splice(i, 1)
-    }
+    REFUGIO_ENROLLMENTS.filter(e => e.member_id === id).forEach(e => {
+        deleteDoc(doc(db, 'refugioEnrollments', e.member_id)).catch(err => console.error('No se pudo borrar la inscripción de refugio', err))
+    })
+    REFUGIO_ENROLLMENTS = REFUGIO_ENROLLMENTS.filter(e => e.member_id !== id)
     for (let i = PROFILE_NOTES.length - 1; i >= 0; i--) {
         if (PROFILE_NOTES[i].member_id === id) {
             const [removed] = PROFILE_NOTES.splice(i, 1)
@@ -472,7 +473,11 @@ export function mergeMembers(keepId, mergeId) {
     ESCUELA_ATTENDANCES.forEach(a => { if (a.member_id === mergeId) a.member_id = keepId })
     if (!REFUGIO_ENROLLMENTS.some(e => e.member_id === keepId)) {
         const enrollment = REFUGIO_ENROLLMENTS.find(e => e.member_id === mergeId)
-        if (enrollment) enrollment.member_id = keepId
+        if (enrollment) {
+            REFUGIO_ENROLLMENTS = REFUGIO_ENROLLMENTS.map(e => (e.member_id === mergeId ? { ...e, member_id: keepId } : e))
+            setDoc(doc(db, 'refugioEnrollments', keepId), { refugio_id: enrollment.refugio_id }).catch(err => console.error('No se pudo traspasar la inscripción de refugio', err))
+            deleteDoc(doc(db, 'refugioEnrollments', mergeId)).catch(err => console.error('No se pudo borrar la inscripción antigua de refugio', err))
+        }
     }
 
     // 5. Completa los campos vacíos de la ficha que se conserva con los del
@@ -1629,49 +1634,51 @@ export function registerEscuelaAttendance(memberId, classId, modality = 'presenc
 }
 
 // ============== REFUGIOS (GRUPOS PEQUEÑOS / CÉLULAS) ==============
+// Sincronizado con Firestore (antes vivía solo en memoria y se perdía al
+// recargar la página) — ver startCoreDataSync más abajo, gated a Refugio
+// igual que el resto de las funciones de ministerio todavía no migradas a
+// multi-iglesia.
+let REFUGIOS = []
+let REFUGIO_ENROLLMENTS = []
 
-const REFUGIOS = [
-    { id: 'refugio-1', name: 'Refugio Vida Nueva', leader_member_id: '3', meeting_day: 'Miércoles', meeting_time: '19:00', location: 'Casa de la familia Torrez', created_at: new Date().toISOString() },
-]
-
-const REFUGIO_ENROLLMENTS = [
-    { member_id: '3', refugio_id: 'refugio-1' },
-]
-
-// Sincronizar bandera en MEMBERS para quienes ya están en un refugio
-REFUGIO_ENROLLMENTS.forEach(e => {
-    const member = MEMBERS.find(m => m.id === e.member_id)
-    if (member) member.grupo_refugios = true
-})
+function refugioDocRef(id) { return doc(db, 'refugios', id) }
+function refugioEnrollmentDocRef(memberId) { return doc(db, 'refugioEnrollments', memberId) }
 
 export function getRefugios() { return [...REFUGIOS] }
 
 export function getRefugioById(id) { return REFUGIOS.find(r => r.id === id) || null }
 
 export function createRefugio(data) {
-    const newRefugio = { ...data, id: `refugio-${Date.now()}`, created_at: new Date().toISOString() }
-    REFUGIOS.push(newRefugio)
+    const id = `refugio-${Date.now()}`
+    const newRefugio = { ...data, id, created_at: new Date().toISOString() }
+    REFUGIOS = [...REFUGIOS, newRefugio]
+    const { id: _id, ...rest } = newRefugio
+    setDoc(refugioDocRef(id), rest).catch(err => console.error('No se pudo guardar el refugio', err))
     return newRefugio
 }
 
 export function updateRefugio(id, data) {
     const index = REFUGIOS.findIndex(r => r.id === id)
     if (index === -1) return null
-    REFUGIOS[index] = { ...REFUGIOS[index], ...data }
-    return REFUGIOS[index]
+    const updated = { ...REFUGIOS[index], ...data }
+    REFUGIOS = REFUGIOS.map((r, i) => (i === index ? updated : r))
+    updateDoc(refugioDocRef(id), data).catch(err => console.error('No se pudo sincronizar el refugio', err))
+    return updated
 }
 
 export function deleteRefugio(id) {
     const index = REFUGIOS.findIndex(r => r.id === id)
     if (index === -1) return false
-    REFUGIOS.splice(index, 1)
+    REFUGIOS = REFUGIOS.filter(r => r.id !== id)
+    deleteDoc(refugioDocRef(id)).catch(err => console.error('No se pudo borrar el refugio', err))
 
-    for (let i = REFUGIO_ENROLLMENTS.length - 1; i >= 0; i--) {
-        if (REFUGIO_ENROLLMENTS[i].refugio_id === id) {
-            patchMember(REFUGIO_ENROLLMENTS[i].member_id, { grupo_refugios: false })
-            REFUGIO_ENROLLMENTS.splice(i, 1)
-        }
-    }
+    const toRemove = REFUGIO_ENROLLMENTS.filter(e => e.refugio_id === id)
+    REFUGIO_ENROLLMENTS = REFUGIO_ENROLLMENTS.filter(e => e.refugio_id !== id)
+    toRemove.forEach(e => {
+        // Se queda en la lista general (grupo_refugios sigue true) — solo
+        // pierde la asignación al refugio específico que se borró.
+        deleteDoc(refugioEnrollmentDocRef(e.member_id)).catch(err => console.error('No se pudo borrar la inscripción', err))
+    })
     return true
 }
 
@@ -1679,18 +1686,18 @@ export function getRefugioEnrollments() { return [...REFUGIO_ENROLLMENTS] }
 
 export function enrollInRefugio(memberId, refugioId) {
     const existing = REFUGIO_ENROLLMENTS.find(e => e.member_id === memberId)
-    if (existing) {
-        existing.refugio_id = refugioId
-    } else {
-        REFUGIO_ENROLLMENTS.push({ member_id: memberId, refugio_id: refugioId })
-    }
+    const entry = { member_id: memberId, refugio_id: refugioId }
+    REFUGIO_ENROLLMENTS = existing
+        ? REFUGIO_ENROLLMENTS.map(e => (e.member_id === memberId ? entry : e))
+        : [...REFUGIO_ENROLLMENTS, entry]
+    setDoc(refugioEnrollmentDocRef(memberId), { refugio_id: refugioId }).catch(err => console.error('No se pudo guardar la inscripción', err))
     patchMember(memberId, { grupo_refugios: true })
-    return { member_id: memberId, refugio_id: refugioId }
+    return entry
 }
 
 export function removeFromRefugio(memberId) {
-    const idx = REFUGIO_ENROLLMENTS.findIndex(e => e.member_id === memberId)
-    if (idx !== -1) REFUGIO_ENROLLMENTS.splice(idx, 1)
+    REFUGIO_ENROLLMENTS = REFUGIO_ENROLLMENTS.filter(e => e.member_id !== memberId)
+    deleteDoc(refugioEnrollmentDocRef(memberId)).catch(err => console.error('No se pudo borrar la inscripción', err))
     patchMember(memberId, { grupo_refugios: false })
 }
 
@@ -1701,6 +1708,25 @@ export function getMemberRefugio(memberId) {
     if (!refugio) return null
     const leader = refugio.leader_member_id ? MEMBERS.find(m => m.id === refugio.leader_member_id) : null
     return { refugio, leaderName: leader ? leader.full_name : null }
+}
+
+// Lista general de Refugios: miembros marcados como parte del ministerio
+// (grupo_refugios) que TODAVÍA no tienen una inscripción a un refugio
+// específico — permite anotar el interés de alguien antes de saber a cuál
+// asignarlo.
+export function getRefugiosGeneralPool() {
+    const enrolledIds = new Set(REFUGIO_ENROLLMENTS.map(e => e.member_id))
+    return MEMBERS.filter(m => m.grupo_refugios && !enrolledIds.has(m.id))
+}
+
+export function addMemberToRefugiosGeneral(memberId) {
+    patchMember(memberId, { grupo_refugios: true })
+}
+
+// Solo tiene sentido para alguien de la lista general (sin refugio
+// asignado todavía) — a quien ya tiene uno se le quita con removeFromRefugio.
+export function removeMemberFromRefugiosGeneral(memberId) {
+    patchMember(memberId, { grupo_refugios: false })
 }
 
 // ============== HOJA DE VIDA (MEMBER PROFILES) ==============
@@ -2694,12 +2720,13 @@ const STORAGE_KEY = 'churchattend_mock_db_v1'
 // más abajo "Sincronización con Firestore"), compartidos entre todos los
 // dispositivos. El resto de las "tablas" sigue en memoria + localStorage.
 // MEMBER_PROFILES, GROUP_NOTICES, SERVICES y ATTENDANCES ya NO se guardan
-// aquí — viven en Firestore (ver más abajo). GROUP_MESSAGES (chat) sigue
-// pendiente de migración.
+// aquí — viven en Firestore (ver más abajo). REFUGIOS/REFUGIO_ENROLLMENTS
+// tampoco — además, ya no son arrays fijos (se reasignan al sincronizar),
+// así que este mecanismo de mutar-en-el-lugar ni siquiera los alcanzaría.
+// GROUP_MESSAGES (chat) sigue pendiente de migración.
 const COLLECTIONS = {
     SYSTEM_SETTINGS,
     ESCUELA_CLASSES, ESCUELA_ATTENDANCES, ESCUELA_ENROLLMENTS,
-    REFUGIOS, REFUGIO_ENROLLMENTS,
     PROFILE_NOTES,
     GROUP_MESSAGES,
     PRAYER_REQUESTS,
@@ -2881,6 +2908,18 @@ export function startCoreDataSync(churchId) {
             ALABANZA_SETLISTS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         }, (err) => {
             console.error('Error sincronizando el repertorio de los servicios', err)
+        })
+
+        onSnapshot(collection(db, 'refugios'), (snap) => {
+            REFUGIOS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        }, (err) => {
+            console.error('Error sincronizando refugios', err)
+        })
+
+        onSnapshot(collection(db, 'refugioEnrollments'), (snap) => {
+            REFUGIO_ENROLLMENTS = snap.docs.map(d => ({ member_id: d.id, ...d.data() }))
+        }, (err) => {
+            console.error('Error sincronizando las inscripciones a refugios', err)
         })
     } else {
         prayerRequestsFirstLoad = false

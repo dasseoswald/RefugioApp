@@ -4,13 +4,14 @@ import {
     getMembers, getMemberById,
     getRefugios, createRefugio, updateRefugio, deleteRefugio,
     getRefugioEnrollments, enrollInRefugio, removeFromRefugio,
+    getRefugiosGeneralPool, addMemberToRefugiosGeneral, removeMemberFromRefugiosGeneral,
     getGroupNotices, createGroupNotice
 } from '../../data/mockData.js'
 import Modal from '../../components/ui/Modal.jsx'
 import {
     Home, Users, UserPlus, UserMinus, Search, CheckCircle2,
     Crown, Plus, Edit2, Trash2, ChevronDown, ChevronUp, MapPin, Clock,
-    Megaphone, Send, Calendar
+    Megaphone, Send, Calendar, ClipboardList, X
 } from 'lucide-react'
 
 const COLOR = '#010101'
@@ -24,9 +25,13 @@ export default function RefugiosPage() {
     const [refugios, setRefugios] = useState([])
     const [enrollments, setEnrollments] = useState([])
     const [members, setMembers] = useState([])
+    const [generalPool, setGeneralPool] = useState([])
     const [notification, setNotification] = useState(null)
     const [expandedId, setExpandedId] = useState(null)
     const [searchTerms, setSearchTerms] = useState({})
+    const [generalSearchTerm, setGeneralSearchTerm] = useState('')
+    const [assigningMemberId, setAssigningMemberId] = useState(null)
+    const [assignRefugioId, setAssignRefugioId] = useState('')
 
     const [showFormModal, setShowFormModal] = useState(false)
     const [editingRefugio, setEditingRefugio] = useState(null)
@@ -44,6 +49,7 @@ export default function RefugiosPage() {
         setRefugios(getRefugios())
         setEnrollments(getRefugioEnrollments())
         setMembers(getMembers().filter(m => m.is_active))
+        setGeneralPool(getRefugiosGeneralPool())
         setNotices(getGroupNotices('refugios'))
     }
 
@@ -76,6 +82,12 @@ export default function RefugiosPage() {
 
     const totalEnrolled = enrollments.length
     const sinLider = refugios.filter(r => !r.leader_member_id).length
+
+    const availableForGeneral = members.filter(m =>
+        !m.grupo_refugios &&
+        (m.full_name.toLowerCase().includes(generalSearchTerm.toLowerCase()) ||
+            (m.email || '').toLowerCase().includes(generalSearchTerm.toLowerCase()))
+    )
 
     const openCreateModal = () => {
         setEditingRefugio(null)
@@ -128,6 +140,34 @@ export default function RefugiosPage() {
         showNotification(`${memberName} removido del refugio`, 'info')
     }
 
+    // Lista general: anotar el interés de alguien en Refugios antes de saber
+    // a cuál asignarlo.
+    const handleAddToGeneral = (memberId, memberName) => {
+        addMemberToRefugiosGeneral(memberId)
+        refreshData()
+        setGeneralSearchTerm('')
+        showNotification(`${memberName} agregado a la lista general de Refugios`)
+    }
+
+    const handleRemoveFromGeneral = (memberId, memberName) => {
+        removeMemberFromRefugiosGeneral(memberId)
+        refreshData()
+        showNotification(`${memberName} quitado de la lista general`, 'info')
+    }
+
+    const openAssignPicker = (memberId) => {
+        setAssigningMemberId(memberId)
+        setAssignRefugioId('')
+    }
+
+    const handleConfirmAssign = (memberName) => {
+        if (!assignRefugioId) return
+        enrollInRefugio(assigningMemberId, assignRefugioId)
+        refreshData()
+        setAssigningMemberId(null)
+        showNotification(`${memberName} asignado a un refugio`)
+    }
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -176,6 +216,100 @@ export default function RefugiosPage() {
                     style={{ background: GRADIENT }}>
                     <Plus className="w-4 h-4" /> Nuevo Refugio
                 </button>
+            </div>
+
+            {/* Lista general de Refugios: anotar interés antes de asignar a un refugio específico */}
+            <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                    <ClipboardList className="w-5 h-5" style={{ color: COLOR }} />
+                    <div>
+                        <h3 className="text-lg font-semibold text-[#111111]">Lista General de Refugios</h3>
+                        <p className="text-xs text-[#6E6E6E]">Agrega a alguien interesado en Refugios y asígnalo a uno específico cuando corresponda</p>
+                    </div>
+                </div>
+                <div className="p-5 border-b border-gray-100 bg-gray-50/30">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6E6E6E]" />
+                        <input type="text" value={generalSearchTerm} onChange={(e) => setGeneralSearchTerm(e.target.value)}
+                            placeholder="Buscar miembro por nombre o correo para agregar a la lista..."
+                            className="w-full pl-9 pr-4 py-2.5 rounded-xl border-2 border-gray-100 bg-white focus:outline-none focus:border-[#010101] text-sm" />
+                    </div>
+                    {generalSearchTerm && (
+                        <div className="mt-2 max-h-48 overflow-y-auto space-y-1.5">
+                            {availableForGeneral.length === 0 ? (
+                                <p className="text-sm text-[#6E6E6E] text-center py-3">Sin resultados</p>
+                            ) : availableForGeneral.slice(0, 8).map(m => (
+                                <div key={m.id} className="flex items-center justify-between px-4 py-2 bg-white rounded-xl border border-gray-100">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-[#6E6E6E]/15 flex items-center justify-center text-[#6E6E6E] text-xs font-semibold">{m.full_name.charAt(0)}</div>
+                                        <div>
+                                            <p className="text-sm font-medium text-[#111111]">{m.full_name}</p>
+                                            <p className="text-xs text-[#6E6E6E]">{m.member_type}</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => handleAddToGeneral(m.id, m.full_name)}
+                                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white font-medium cursor-pointer transition-all hover:shadow-md"
+                                        style={{ background: COLOR }}>
+                                        <UserPlus className="w-3.5 h-3.5" /> Agregar a la lista
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <div className="p-5">
+                    <p className="text-xs font-semibold text-[#6E6E6E] uppercase tracking-wider mb-3">
+                        Esperando asignación ({generalPool.length})
+                    </p>
+                    {generalPool.length === 0 ? (
+                        <p className="text-sm text-[#6E6E6E] text-center py-4">Nadie en la lista general por ahora</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {generalPool.map(m => (
+                                <div key={m.id} className="flex items-center justify-between px-4 py-2.5 bg-gray-50/60 rounded-xl border border-gray-100 gap-3 flex-wrap">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold" style={{ background: COLOR }}>
+                                            {m.full_name.charAt(0)}
+                                        </div>
+                                        <span className="text-sm font-medium text-[#111111]">{m.full_name}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {assigningMemberId === m.id ? (
+                                            <>
+                                                <select value={assignRefugioId} onChange={(e) => setAssignRefugioId(e.target.value)}
+                                                    className="text-xs px-2.5 py-1.5 rounded-lg border-2 border-gray-200 bg-white focus:outline-none focus:border-[#010101] cursor-pointer">
+                                                    <option value="">Elige un refugio...</option>
+                                                    {refugios.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                                                </select>
+                                                <button onClick={() => handleConfirmAssign(m.full_name)} disabled={!assignRefugioId}
+                                                    className="text-xs px-3 py-1.5 rounded-lg text-white font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    style={{ background: COLOR }}>
+                                                    Confirmar
+                                                </button>
+                                                <button onClick={() => setAssigningMemberId(null)} className="p-1.5 rounded-lg text-[#6E6E6E] hover:bg-gray-100 cursor-pointer">
+                                                    <X className="w-3.5 h-3.5" />
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <button onClick={() => openAssignPicker(m.id)} disabled={refugios.length === 0}
+                                                    title={refugios.length === 0 ? 'Primero crea un refugio' : ''}
+                                                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-white font-medium cursor-pointer transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    style={{ background: COLOR }}>
+                                                    <Home className="w-3.5 h-3.5" /> Asignar a un Refugio
+                                                </button>
+                                                <button onClick={() => handleRemoveFromGeneral(m.id, m.full_name)}
+                                                    className="p-1.5 rounded-lg text-gray-300 hover:text-[#E74C3C] hover:bg-[#FADBD8] transition-colors cursor-pointer">
+                                                    <UserMinus className="w-4 h-4" />
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Refugios list */}
