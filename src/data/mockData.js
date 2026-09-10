@@ -89,7 +89,7 @@ export let OPERATIONAL_GROUPS = [
     { id: 'jovenes', name: 'Jóvenes', field: 'grupo_jovenes', icon: 'Users' },
     { id: 'damas', name: 'Damas', field: 'grupo_damas', icon: 'UserCircle' },
     { id: 'alabanza', name: 'Alabanza / Música', field: 'grupo_alabanza', icon: 'Music' },
-    { id: 'refugios', name: 'Refugios', field: 'grupo_refugios', icon: 'Home' },
+    { id: 'refugios', name: 'Pequeños Refugios', field: 'grupo_refugios', icon: 'Home' },
 ]
 
 let MEMBERS = [

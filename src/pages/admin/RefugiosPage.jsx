@@ -67,7 +67,7 @@ export default function RefugiosPage() {
         setNoticeTitle('')
         setNoticeContent('')
         setNotices(getGroupNotices('refugios'))
-        showNotification('Aviso publicado en Refugios')
+        showNotification('Aviso publicado en Pequeños Refugios')
     }
 
     const showNotification = (message, type = 'success') => {
@@ -146,7 +146,7 @@ export default function RefugiosPage() {
         addMemberToRefugiosGeneral(memberId)
         refreshData()
         setGeneralSearchTerm('')
-        showNotification(`${memberName} agregado a la lista general de Refugios`)
+        showNotification(`${memberName} agregado a la lista general de Pequeños Refugios`)
     }
 
     const handleRemoveFromGeneral = (memberId, memberName) => {
@@ -179,7 +179,7 @@ export default function RefugiosPage() {
                         <Home className="w-7 h-7 text-white" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold">Refugios</h1>
+                        <h1 className="text-2xl font-bold">Pequeños Refugios</h1>
                         <p className="text-white/70 text-sm mt-1">Grupos pequeños: subgrupos, líderes y miembros</p>
                     </div>
                 </div>
@@ -197,11 +197,11 @@ export default function RefugiosPage() {
             <div className="grid grid-cols-3 gap-4">
                 <div className="bg-white rounded-xl p-4 shadow-[0_2px_12px_rgba(38,150,210,0.08)] text-center">
                     <p className="text-2xl font-bold" style={{ color: COLOR }}>{refugios.length}</p>
-                    <p className="text-xs text-[#6E6E6E] mt-1">Refugios Activos</p>
+                    <p className="text-xs text-[#6E6E6E] mt-1">Pequeños Refugios Activos</p>
                 </div>
                 <div className="bg-white rounded-xl p-4 shadow-[0_2px_12px_rgba(38,150,210,0.08)] text-center">
                     <p className="text-2xl font-bold text-[#111111]">{totalEnrolled}</p>
-                    <p className="text-xs text-[#6E6E6E] mt-1">Miembros en Refugios</p>
+                    <p className="text-xs text-[#6E6E6E] mt-1">Miembros en Pequeños Refugios</p>
                 </div>
                 <div className="bg-white rounded-xl p-4 shadow-[0_2px_12px_rgba(38,150,210,0.08)] text-center">
                     <p className="text-2xl font-bold text-[#E8A838]">{sinLider}</p>
@@ -223,8 +223,8 @@ export default function RefugiosPage() {
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
                     <ClipboardList className="w-5 h-5" style={{ color: COLOR }} />
                     <div>
-                        <h3 className="text-lg font-semibold text-[#111111]">Lista General de Refugios</h3>
-                        <p className="text-xs text-[#6E6E6E]">Agrega a alguien interesado en Refugios y asígnalo a uno específico cuando corresponda</p>
+                        <h3 className="text-lg font-semibold text-[#111111]">Lista General de Pequeños Refugios</h3>
+                        <p className="text-xs text-[#6E6E6E]">Agrega a alguien interesado en Pequeños Refugios y asígnalo a uno específico cuando corresponda</p>
                     </div>
                 </div>
                 <div className="p-5 border-b border-gray-100 bg-gray-50/30">
@@ -475,7 +475,7 @@ export default function RefugiosPage() {
                 {notices.length === 0 ? (
                     <div className="p-10 text-center text-[#6E6E6E]">
                         <Megaphone className="w-10 h-10 mx-auto mb-2 text-[#6E6E6E]/20" />
-                        <p className="text-sm">No hay avisos publicados en Refugios</p>
+                        <p className="text-sm">No hay avisos publicados en Pequeños Refugios</p>
                     </div>
                 ) : (
                     <div className="divide-y divide-gray-50">
