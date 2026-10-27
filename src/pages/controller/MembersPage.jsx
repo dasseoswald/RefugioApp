@@ -9,7 +9,7 @@ import Modal from '../../components/ui/Modal.jsx'
 import { useRolePermissions, hasDynamicPermission } from '../../hooks/useRolePermissions.js'
 import { getWhatsAppUrl } from '../../lib/whatsapp.js'
 import jsPDF from 'jspdf'
-import 'jspdf-autotable'
+import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import { Search, UserPlus, Edit2, ToggleLeft, ToggleRight, Users, Filter, FileUser, Home, X, CheckCircle2, Circle, Trash2, AlertTriangle, Merge, FileText, Table } from 'lucide-react'
 
@@ -115,7 +115,7 @@ export default function MembersPage({ canToggleActive: canToggleActiveProp = fal
         doc.setTextColor(127, 140, 141)
         doc.text(`${rows.length} miembros — ${new Date().toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })}`, 14, 28)
 
-        doc.autoTable({
+        autoTable(doc, {
             startY: 34,
             head: [['#', 'Nombre', 'Tipo', 'Estado', 'Teléfono', 'Correo', 'Ministerios', 'Refugio', 'Asist.']],
             body: rows.map((r, i) => [i + 1, r.nombre, r.tipo, r.estado, r.telefono, r.correo, r.ministerios, r.refugio, r.asistencias]),

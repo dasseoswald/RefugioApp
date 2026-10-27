@@ -4,7 +4,7 @@ import { getServices, getAttendancesByService, getMembers, getMemberById, getMem
 import { useRolePermissions, hasDynamicPermission } from '../../hooks/useRolePermissions.js'
 import { BarChart3, Download, FileText, Table, Filter, CalendarDays, Users, TrendingUp, TrendingDown, Minus, UserX, Clock } from 'lucide-react'
 import jsPDF from 'jspdf'
-import 'jspdf-autotable'
+import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import { Bar } from 'react-chartjs-2'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip, Legend } from 'chart.js'
@@ -103,7 +103,7 @@ export default function ReportsPage() {
         doc.text(`${selectedService?.name} — ${formatDate(selectedService?.service_date || '')}`, 14, 30)
         doc.text(`Total asistentes: ${filtered.length}`, 14, 37)
 
-        doc.autoTable({
+        autoTable(doc, {
             startY: 44,
             head: [['#', 'Nombre', 'Tipo', 'Ministerio', 'Hora', 'Método']],
             body: filtered.map((r, i) => [i + 1, r.memberName, r.memberType, r.memberGroup, formatTime(r.check_in_time), r.method === 'facial' ? 'Facial' : 'Manual']),
