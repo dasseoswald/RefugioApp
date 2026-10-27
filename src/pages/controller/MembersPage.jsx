@@ -8,7 +8,10 @@ import {
 import Modal from '../../components/ui/Modal.jsx'
 import { useRolePermissions, hasDynamicPermission } from '../../hooks/useRolePermissions.js'
 import { getWhatsAppUrl } from '../../lib/whatsapp.js'
-import { Search, UserPlus, Edit2, ToggleLeft, ToggleRight, Users, Filter, FileUser, Home, X, CheckCircle2, Circle, Trash2, AlertTriangle, Merge } from 'lucide-react'
+import jsPDF from 'jspdf'
+import 'jspdf-autotable'
+import * as XLSX from 'xlsx'
+import { Search, UserPlus, Edit2, ToggleLeft, ToggleRight, Users, Filter, FileUser, Home, X, CheckCircle2, Circle, Trash2, AlertTriangle, Merge, FileText, Table } from 'lucide-react'
 
 function WhatsAppIcon({ className }) {
     return (
@@ -80,6 +83,66 @@ export default function MembersPage({ canToggleActive: canToggleActiveProp = fal
     const visibleMembers = filtered.slice(0, visibleCount)
     const hasMore = visibleCount < filtered.length
 
+    // Exportar datos personales: mismo criterio que exportar reportes
+    // (admin, controlador, o quien tenga "Exportar PDF/Excel" en la matriz).
+    const canExport = user?.role === 'admin' || user?.role === 'controller' || hasDynamicPermission(rolePermissions, user?.role, 'export_reports')
+
+    // Exporta TODOS los miembros que coinciden con la búsqueda/filtros
+    // actuales (no solo los que ya se cargaron en pantalla por el scroll).
+    const buildExportRows = () => filtered.map((m) => ({
+        nombre: m.full_name,
+        tipo: m.member_type,
+        estado: m.is_active ? 'Activo' : 'Inactivo',
+        telefono: m.phone || '',
+        correo: m.email || '',
+        nacimiento: m.birth_date || '',
+        genero: m.gender === 'M' ? 'Masculino' : m.gender === 'F' ? 'Femenino' : (m.gender || ''),
+        estadoCivil: m.civil_status || '',
+        ministerios: OPERATIONAL_GROUPS.filter(g => m[g.field]).map(g => g.name).join(', '),
+        refugio: getMemberRefugio(m.id)?.refugio.name || '',
+        asistencias: getAttendancesByMember(m.id).length,
+    }))
+
+    const exportFileSuffix = () => new Date().toISOString().split('T')[0]
+
+    const exportMembersToPDF = () => {
+        const rows = buildExportRows()
+        const doc = new jsPDF({ orientation: 'landscape' })
+        doc.setFontSize(18)
+        doc.setTextColor(44, 62, 80)
+        doc.text('Listado de Miembros', 14, 20)
+        doc.setFontSize(11)
+        doc.setTextColor(127, 140, 141)
+        doc.text(`${rows.length} miembros — ${new Date().toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })}`, 14, 28)
+
+        doc.autoTable({
+            startY: 34,
+            head: [['#', 'Nombre', 'Tipo', 'Estado', 'Teléfono', 'Correo', 'Ministerios', 'Refugio', 'Asist.']],
+            body: rows.map((r, i) => [i + 1, r.nombre, r.tipo, r.estado, r.telefono, r.correo, r.ministerios, r.refugio, r.asistencias]),
+            styles: { font: 'helvetica', fontSize: 8, cellPadding: 3 },
+            headStyles: { fillColor: [74, 111, 165], textColor: 255, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [240, 246, 255] },
+        })
+
+        doc.save(`Miembros_${exportFileSuffix()}.pdf`)
+    }
+
+    const exportMembersToExcel = () => {
+        const rows = buildExportRows()
+        const wsData = [
+            ['Listado de Miembros'],
+            [`${rows.length} miembros`, `Fecha: ${exportFileSuffix()}`],
+            [],
+            ['#', 'Nombre', 'Tipo de Miembro', 'Estado', 'Teléfono', 'Correo', 'Fecha de Nacimiento', 'Género', 'Estado Civil', 'Ministerios', 'Refugio', 'Asistencias'],
+            ...rows.map((r, i) => [i + 1, r.nombre, r.tipo, r.estado, r.telefono, r.correo, r.nacimiento, r.genero, r.estadoCivil, r.ministerios, r.refugio, r.asistencias]),
+        ]
+        const wb = XLSX.utils.book_new()
+        const ws = XLSX.utils.aoa_to_sheet(wsData)
+        ws['!cols'] = [{ wch: 5 }, { wch: 32 }, { wch: 16 }, { wch: 10 }, { wch: 16 }, { wch: 30 }, { wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 28 }, { wch: 22 }, { wch: 12 }]
+        XLSX.utils.book_append_sheet(wb, ws, 'Miembros')
+        XLSX.writeFile(wb, `Miembros_${exportFileSuffix()}.xlsx`)
+    }
+
     // Scroll infinito: cuando el borde inferior de la lista se acerca a la
     // pantalla se muestran PAGE_SIZE miembros más. El observador se vuelve a
     // crear tras cada carga para que, si el borde sigue a la vista (lista
@@ -150,11 +213,29 @@ export default function MembersPage({ canToggleActive: canToggleActiveProp = fal
                     <h1 className="text-2xl font-bold text-[#111111]">Gestión de Miembros</h1>
                     <p className="text-[#6E6E6E] mt-1">{filtered.length} miembros encontrados</p>
                 </div>
-                <button onClick={openCreate}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-medium text-sm transition-all hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
-                    style={{ background: 'linear-gradient(135deg, #2696D2, #1D74A8)' }}>
-                    <UserPlus className="w-4 h-4" /> Nuevo Miembro
-                </button>
+                <div className="flex flex-wrap gap-2">
+                    {canExport && (
+                        <>
+                            <button onClick={exportMembersToPDF} disabled={filtered.length === 0}
+                                title="Exportar la lista (con los filtros actuales) a PDF"
+                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white font-medium text-sm transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                style={{ background: 'linear-gradient(135deg, #E74C3C, #C0392B)' }}>
+                                <FileText className="w-4 h-4" /> PDF
+                            </button>
+                            <button onClick={exportMembersToExcel} disabled={filtered.length === 0}
+                                title="Exportar la lista (con los filtros actuales) a Excel"
+                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white font-medium text-sm transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                style={{ background: 'linear-gradient(135deg, #13CD68, #0FA855)' }}>
+                                <Table className="w-4 h-4" /> Excel
+                            </button>
+                        </>
+                    )}
+                    <button onClick={openCreate}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-medium text-sm transition-all hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
+                        style={{ background: 'linear-gradient(135deg, #2696D2, #1D74A8)' }}>
+                        <UserPlus className="w-4 h-4" /> Nuevo Miembro
+                    </button>
+                </div>
             </div>
 
             {/* Posibles duplicados (mismo nombre, con o sin tildes) */}
