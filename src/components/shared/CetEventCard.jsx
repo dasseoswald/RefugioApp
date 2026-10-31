@@ -206,6 +206,13 @@ export default function CetEventCard({ event, canManage, user }) {
                                         </button>
                                     </>
                                 )}
+                                {registrationOpen && (
+                                    <button onClick={openList}
+                                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white hover:shadow-md cursor-pointer"
+                                        style={{ background: 'linear-gradient(135deg, #E8A838, #D09530)' }}>
+                                        <UserPlus className="w-4 h-4" /> Registrar persona
+                                    </button>
+                                )}
                                 <button onClick={openList}
                                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white hover:shadow-md cursor-pointer"
                                     style={{ background: 'linear-gradient(135deg, #2696D2, #1D74A8)' }}>
