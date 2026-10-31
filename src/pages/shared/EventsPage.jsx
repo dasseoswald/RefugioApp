@@ -6,7 +6,9 @@ import {
     getEventRegistrations, subscribeEventRegistrations, getEventRegistrationCount, isRegisteredForEvent, registerForEvent, unregisterFromEvent,
     setEventRegistrationPaymentMethod, getMemberById,
     getChainSlots, subscribeChainSignups, getChainSignupsForEvent, signUpForChainSlot, cancelChainSlotSignup,
+    ensureCetEvent, getCetEvent, CET_EVENT_ID,
 } from '../../data/mockData.js'
+import CetEventCard from '../../components/shared/CetEventCard.jsx'
 import Modal from '../../components/ui/Modal.jsx'
 import {
     PartyPopper, Plus, Calendar, Clock, MapPin, DollarSign, Image as ImageIcon,
@@ -71,6 +73,16 @@ export default function EventsPage() {
     }, [chainEvent])
 
     const refreshData = () => setEvents(getEvents())
+
+    // CET es un evento permanente: la primera vez que alguien que administra
+    // eventos abre esta pantalla (y los eventos ya cargaron) se crea; desde
+    // entonces lo ven todos, y nunca se borra.
+    useEffect(() => {
+        if (canManage) ensureCetEvent(user?.name, user?.auth_uid)
+    }, [events, canManage, user?.name, user?.auth_uid])
+
+    const cetEvent = getCetEvent()
+    const regularEvents = events.filter(e => e.id !== CET_EVENT_ID)
 
     const showNotification = (message) => {
         setNotification(message)
@@ -246,8 +258,10 @@ export default function EventsPage() {
                 </div>
             )}
 
+            {cetEvent && <CetEventCard event={cetEvent} canManage={canManage} user={user} />}
+
             {/* Events grid */}
-            {events.length === 0 ? (
+            {regularEvents.length === 0 ? (
                 <div className="bg-white rounded-2xl p-12 text-center shadow-[0_2px_12px_rgba(38,150,210,0.08)]">
                     <PartyPopper className="w-12 h-12 mx-auto mb-3 text-[#6E6E6E]/20" />
                     <p className="text-lg font-medium text-[#6E6E6E]">Aún no hay eventos publicados</p>
@@ -255,7 +269,7 @@ export default function EventsPage() {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 stagger-children">
-                    {events.map(event => (
+                    {regularEvents.map(event => (
                         <div key={event.id} className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(38,150,210,0.08)] overflow-hidden hover:shadow-[0_8px_24px_rgba(38,150,210,0.15)] transition-all">
                             {/* Poster / cover */}
                             <div className="relative h-44 bg-gray-100">

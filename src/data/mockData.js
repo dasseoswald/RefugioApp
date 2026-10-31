@@ -2385,6 +2385,193 @@ export function cancelChainSlotSignup(eventId, slotKey, memberId) {
     return true
 }
 
+// ---- CET (Cielo en la Tierra) ----
+// Evento PERMANENTE de adoración pública (un solo documento events/cet que
+// nunca se borra) con su propio ciclo: se "activa" para una fecha elegida y
+// dura ese día completo. Cada vez que se activa es una nueva edición; las
+// personas nuevas que se conectan quedan en cetConnections ("Personas que
+// conectaron"), agrupadas por la fecha de su edición, para luego sumarlas a
+// la lista de difusión. NO son miembros ni visitantes: solo si después van a
+// un servicio entran al proceso de visitantes, y ahí se vinculan solas (ver
+// linkCetOnMemberCreated en functions/index.js) y su ficha queda marcada con
+// connected_cet.
+export const CET_EVENT_ID = 'cet'
+
+function localDateString(date = new Date()) {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+}
+
+export function getCetEvent() {
+    return EVENTS.find(e => e.id === CET_EVENT_ID) || null
+}
+
+// Crea el evento permanente la primera vez (lo llama quien administra
+// eventos al abrir la pantalla). Sin is_active/active_date a propósito: si
+// el caché local estuviera desactualizado, el merge no puede pisar una
+// activación ya guardada.
+export function ensureCetEvent(createdBy, createdByUid) {
+    if (!eventsLoaded || getCetEvent()) return
+    const base = {
+        name: 'CET — Cielo en la Tierra',
+        description: 'Adoración pública para levantar el nombre de Dios en nuestra comunidad.',
+        event_type: 'cet',
+        is_permanent: true,
+        start_date: localDateString(),
+        days: 1,
+        starts_at: '',
+        ends_at: '',
+        location: '',
+        price: 'Gratis',
+        poster_url: null,
+        created_by: createdBy || null,
+        created_by_uid: createdByUid || null,
+        created_at: new Date().toISOString(),
+    }
+    EVENTS = [...EVENTS, { id: CET_EVENT_ID, ...base }]
+    setDoc(doc(db, 'events', CET_EVENT_ID), base, { merge: true }).catch(err => console.error('No se pudo crear el evento CET', err))
+    notifyEventListeners()
+}
+
+// inactive | scheduled (activado para una fecha futura) | today (en curso,
+// el día completo) | past (la fecha ya pasó, sigue sin desactivarse).
+export function getCetStatus(event) {
+    if (!event?.is_active || !event.active_date) return { state: 'inactive', date: null }
+    const today = localDateString()
+    if (event.active_date > today) return { state: 'scheduled', date: event.active_date }
+    if (event.active_date === today) return { state: 'today', date: event.active_date }
+    return { state: 'past', date: event.active_date }
+}
+
+export function activateCetEvent(date, activatedBy) {
+    const event = getCetEvent()
+    if (!event || !date) return null
+    const patch = { is_active: true, active_date: date, active_set_by: activatedBy || null }
+    EVENTS = EVENTS.map(e => (e.id === CET_EVENT_ID ? { ...e, ...patch } : e))
+    updateDoc(doc(db, 'events', CET_EVENT_ID), patch).catch(err => console.error('No se pudo activar CET', err))
+    notifyEventListeners()
+    return { ...event, ...patch }
+}
+
+export function deactivateCetEvent(deactivatedBy) {
+    const event = getCetEvent()
+    if (!event) return null
+    const patch = { is_active: false, active_date: null, active_set_by: deactivatedBy || null }
+    EVENTS = EVENTS.map(e => (e.id === CET_EVENT_ID ? { ...e, ...patch } : e))
+    updateDoc(doc(db, 'events', CET_EVENT_ID), patch).catch(err => console.error('No se pudo desactivar CET', err))
+    notifyEventListeners()
+    return { ...event, ...patch }
+}
+
+// Últimos 8 dígitos del teléfono: así "+56 9 3237 7298" y "932377298" son
+// la misma persona. Mismo cálculo que el servidor (functions/index.js).
+export function phoneKeyOf(phone) {
+    const digits = String(phone || '').replace(/\D/g, '')
+    return digits.length >= 8 ? digits.slice(-8) : null
+}
+
+let CET_CONNECTIONS = []
+let cetConnectionListeners = []
+let cetConnectionsSyncStarted = false
+
+function notifyCetConnectionListeners() { cetConnectionListeners.forEach(fn => fn()) }
+
+function startCetConnectionsSync() {
+    if (cetConnectionsSyncStarted) return
+    cetConnectionsSyncStarted = true
+    onSnapshot(collection(db, 'cetConnections'), (snap) => {
+        CET_CONNECTIONS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        notifyCetConnectionListeners()
+    }, (err) => console.error('Error sincronizando las personas que conectaron en CET', err))
+}
+
+export function subscribeCetConnections(callback) {
+    cetConnectionListeners.push(callback)
+    startCetConnectionsSync()
+    return () => { cetConnectionListeners = cetConnectionListeners.filter(fn => fn !== callback) }
+}
+
+export function getCetConnections() {
+    return [...CET_CONNECTIONS].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+}
+
+// Si la persona ya es miembro (mismo correo o teléfono) se vincula de una
+// vez, sin esperar a que alguien lo haga a mano.
+export function findMemberMatchForCet({ email, phone }) {
+    const emailKey = (email || '').trim().toLowerCase()
+    const phoneKey = phoneKeyOf(phone)
+    return MEMBERS.find(m =>
+        (emailKey && (m.email || '').trim().toLowerCase() === emailKey) ||
+        (phoneKey && phoneKeyOf(m.phone) === phoneKey)
+    ) || null
+}
+
+export function addCetConnection(data, registeredBy) {
+    const editionDate = getCetEvent()?.active_date
+    if (!editionDate) return { error: 'Activa el evento CET para registrar personas' }
+    if (!data.name?.trim()) return { error: 'El nombre es obligatorio' }
+
+    const email = (data.email || '').trim().toLowerCase()
+    const phone = (data.phone || '').trim()
+    const duplicate = CET_CONNECTIONS.find(c =>
+        c.edition_date === editionDate &&
+        ((email && c.email_key === email) || (phoneKeyOf(phone) && c.phone_key === phoneKeyOf(phone)))
+    )
+    if (duplicate) return { error: `${duplicate.name} ya está registrado en esta edición` }
+
+    const id = `cetconn-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    const connection = {
+        edition_date: editionDate,
+        name: data.name.trim(),
+        phone,
+        phone_key: phoneKeyOf(phone),
+        email,
+        email_key: email || null,
+        notes: (data.notes || '').trim(),
+        added_to_broadcast: false,
+        member_id: null,
+        linked_at: null,
+        registered_by: registeredBy?.name || null,
+        registered_by_uid: registeredBy?.uid || null,
+        created_at: new Date().toISOString(),
+    }
+    CET_CONNECTIONS = [...CET_CONNECTIONS, { id, ...connection }]
+    setDoc(doc(db, 'cetConnections', id), connection).catch(err => console.error('No se pudo guardar la persona de CET', err))
+    notifyCetConnectionListeners()
+
+    const match = findMemberMatchForCet({ email, phone })
+    if (match) linkCetConnectionToMember(id, match.id)
+    return { data: { id, ...connection } }
+}
+
+export function updateCetConnection(id, patch) {
+    CET_CONNECTIONS = CET_CONNECTIONS.map(c => (c.id === id ? { ...c, ...patch } : c))
+    updateDoc(doc(db, 'cetConnections', id), patch).catch(err => console.error('No se pudo actualizar la persona de CET', err))
+    notifyCetConnectionListeners()
+}
+
+export function deleteCetConnection(id) {
+    CET_CONNECTIONS = CET_CONNECTIONS.filter(c => c.id !== id)
+    deleteDoc(doc(db, 'cetConnections', id)).catch(err => console.error('No se pudo borrar la persona de CET', err))
+    notifyCetConnectionListeners()
+}
+
+// Vincula a quien conectó en CET con su ficha de miembro: la ficha queda
+// marcada con connected_cet (y la fecha de la primera vez que conectó).
+export function linkCetConnectionToMember(connectionId, memberId) {
+    const connection = CET_CONNECTIONS.find(c => c.id === connectionId)
+    const member = getMemberById(memberId)
+    if (!connection || !member) return false
+    updateCetConnection(connectionId, { member_id: memberId, linked_at: new Date().toISOString() })
+    const earliest = member.cet_connected_date && member.cet_connected_date < connection.edition_date
+        ? member.cet_connected_date
+        : connection.edition_date
+    patchMember(memberId, { connected_cet: true, cet_connected_date: earliest })
+    return true
+}
+
 // ---- Calendario de actividades ----
 // Slide compartido donde cualquier líder de ministerio (o el equipo) puede
 // agregar una actividad — distinto de "Eventos" (que tiene afiche, cupos,

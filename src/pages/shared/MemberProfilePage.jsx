@@ -259,6 +259,11 @@ export default function MemberProfilePage() {
                                         <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${member.is_active ? 'bg-[#E1F9EC] text-[#13CD68]' : 'bg-gray-100 text-[#6E6E6E]'}`}>
                                             {member.is_active ? 'Activo' : 'Inactivo'}
                                         </span>
+                                        {member.connected_cet && (
+                                            <span className="text-xs px-2.5 py-1 rounded-full bg-[#FFF3CD] text-[#8A6116] font-bold">
+                                                Conectó en CET{member.cet_connected_date ? ` (${new Date(member.cet_connected_date + 'T12:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })})` : ''}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">

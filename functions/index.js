@@ -554,3 +554,47 @@ exports.createChurch = onCall(async (request) => {
 
     return { ok: true, churchId: churchRef.id, slug }
 })
+
+// ---- CET: vincular a quien conectó con su ficha cuando se crea como miembro ----
+// Quien conecta en CET queda en cetConnections (ni miembro ni visitante). Si
+// después va a un servicio y se crea su ficha (registro propio, la puerta, o
+// Nuevos), esta función la enlaza sola por correo o teléfono y la marca con
+// connected_cet — corre con Admin SDK porque quien se registra por su cuenta
+// no tiene permiso de leer cetConnections. Solo aplica a Refugio (CET es
+// todavía una función exclusiva de Refugio).
+function phoneKeyOf(phone) {
+    const digits = String(phone || '').replace(/\D/g, '')
+    return digits.length >= 8 ? digits.slice(-8) : null
+}
+
+exports.linkCetOnMemberCreated = onDocumentCreated('members/{memberId}', async (event) => {
+    const member = event.data?.data()
+    if (!member || (member.church_id || 'refugio') !== 'refugio') return
+
+    const email = String(member.email || '').trim().toLowerCase()
+    const phoneKey = phoneKeyOf(member.phone)
+    if (!email && !phoneKey) return
+
+    const matches = new Map()
+    if (email) {
+        const snap = await db.collection('cetConnections').where('email_key', '==', email).get()
+        snap.forEach(d => { if (!d.data().member_id) matches.set(d.id, d) })
+    }
+    if (phoneKey) {
+        const snap = await db.collection('cetConnections').where('phone_key', '==', phoneKey).get()
+        snap.forEach(d => { if (!d.data().member_id) matches.set(d.id, d) })
+    }
+    if (matches.size === 0) return
+
+    const connections = [...matches.values()]
+    const earliest = connections.map(d => d.data().edition_date).sort()[0]
+    const batch = db.batch()
+    connections.forEach(d => batch.update(d.ref, {
+        member_id: event.params.memberId,
+        linked_at: new Date().toISOString(),
+        linked_auto: true,
+    }))
+    batch.update(event.data.ref, { connected_cet: true, cet_connected_date: earliest })
+    await batch.commit()
+    console.log(`linkCetOnMemberCreated: member=${event.params.memberId} conexiones=${connections.length}`)
+})

@@ -273,7 +273,18 @@ service cloud.firestore {
     match /events/{docId} {
       allow read: if isMiembro();
       allow create: if isStaff() || (isMinistryLeader() && request.resource.data.created_by_uid == request.auth.uid);
-      allow update, delete: if isStaff() || (isMinistryLeader() && resource.data.created_by_uid == request.auth.uid);
+      // CET (evento permanente): cualquier líder de ministerio puede
+      // activarlo/desactivarlo para una fecha, pero NADA más del evento.
+      allow update: if isStaff() || (isMinistryLeader() && resource.data.created_by_uid == request.auth.uid)
+        || (isMinistryLeader() && resource.data.get('event_type', '') == 'cet'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_active', 'active_date', 'active_set_by']));
+      allow delete: if isStaff() || (isMinistryLeader() && resource.data.created_by_uid == request.auth.uid);
+    }
+    // Personas nuevas que se conectaron en CET (aún no son miembros ni
+    // visitantes): datos de contacto de gente que no es de la iglesia, así
+    // que solo el equipo y los líderes los ven o tocan.
+    match /cetConnections/{docId} {
+      allow read, create, update, delete: if isStaff() || isMinistryLeader();
     }
     // Inscripción a un evento normal: cada quien inscribe/cancela la suya.
     match /eventRegistrations/{docId} {
@@ -402,7 +413,7 @@ service cloud.firestore {
     // aprobado (no cualquier cuenta de Google autenticada).
     match /{collection}/{docId} {
       allow read, write: if isMiembro()
-        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'groupSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings', 'activities', 'services', 'settings', 'notifications', 'conversations', 'churches', 'userLookup', 'refugios', 'refugioEnrollments']);
+        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'groupSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings', 'activities', 'services', 'settings', 'notifications', 'conversations', 'churches', 'userLookup', 'refugios', 'refugioEnrollments', 'cetConnections']);
     }
   }
 }

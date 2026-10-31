@@ -312,7 +312,12 @@ export default function MembersPage({ canToggleActive: canToggleActiveProp = fal
                                                     {member.full_name.charAt(0)}
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-medium text-[#111111]">{member.full_name}</p>
+                                                    <p className="text-sm font-medium text-[#111111]">
+                                                        {member.full_name}
+                                                        {member.connected_cet && (
+                                                            <span className="ml-2 align-middle text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FFF3CD] text-[#8A6116]" title="Conectó en CET (Cielo en la Tierra)">Conectó en CET</span>
+                                                        )}
+                                                    </p>
                                                     <p className="text-xs text-[#6E6E6E]">{member.email} • {attendanceCount} asistencias</p>
                                                 </div>
                                             </div>
