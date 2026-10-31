@@ -282,9 +282,9 @@ service cloud.firestore {
     }
     // Personas nuevas que se conectaron en CET (aún no son miembros ni
     // visitantes): datos de contacto de gente que no es de la iglesia, así
-    // que solo el equipo y los líderes los ven o tocan.
+    // que solo el equipo, los líderes y Bienvenida los ven o tocan.
     match /cetConnections/{docId} {
-      allow read, create, update, delete: if isStaff() || isMinistryLeader();
+      allow read, create, update, delete: if isStaff() || isMinistryLeader() || hasRole('bienvenida');
     }
     // Inscripción a un evento normal: cada quien inscribe/cancela la suya.
     match /eventRegistrations/{docId} {

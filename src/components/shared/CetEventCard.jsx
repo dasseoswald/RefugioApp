@@ -37,7 +37,9 @@ function WhatsAppIcon({ className }) {
 // activa para una fecha como un servicio y, quien administra, registra ahí a
 // las personas nuevas que conectaron para sumarlas luego a la lista de
 // difusión.
-export default function CetEventCard({ event, canManage, user }) {
+// canManage: activar/desactivar CET (admin, controlador, líderes). canRegister:
+// además registrar y ver a las personas que conectaron — suma a Bienvenida.
+export default function CetEventCard({ event, canManage, canRegister = canManage, user }) {
     const [showActivate, setShowActivate] = useState(false)
     const [activateDate, setActivateDate] = useState(todayString())
     const [showList, setShowList] = useState(false)
@@ -50,12 +52,12 @@ export default function CetEventCard({ event, canManage, user }) {
     const [notification, setNotification] = useState(null)
 
     useEffect(() => {
-        if (!canManage) return
+        if (!canRegister) return
         const refresh = () => setConnections(getCetConnections())
         const unsub = subscribeCetConnections(refresh)
         refresh()
         return unsub
-    }, [canManage])
+    }, [canRegister])
 
     const status = getCetStatus(event)
     const registrationOpen = status.state === 'today' || status.state === 'past'
@@ -179,7 +181,7 @@ export default function CetEventCard({ event, canManage, user }) {
                         </div>
                     )}
 
-                    {canManage ? (
+                    {canRegister ? (
                         <>
                             <div className="flex items-center gap-2 text-sm text-[#6E6E6E]">
                                 <Users className="w-4 h-4" />
@@ -188,7 +190,7 @@ export default function CetEventCard({ event, canManage, user }) {
                                     : `${connections.length} persona${connections.length === 1 ? '' : 's'} conectaron en total`}
                             </div>
                             <div className="flex flex-wrap gap-2">
-                                {status.state === 'inactive' ? (
+                                {!canManage ? null : status.state === 'inactive' ? (
                                     <button onClick={openActivate}
                                         className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white hover:shadow-md cursor-pointer"
                                         style={{ background: 'linear-gradient(135deg, #13CD68, #0FA855)' }}>

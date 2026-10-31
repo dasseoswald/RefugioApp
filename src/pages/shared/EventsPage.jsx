@@ -258,7 +258,7 @@ export default function EventsPage() {
                 </div>
             )}
 
-            {cetEvent && <CetEventCard event={cetEvent} canManage={canManage} user={user} />}
+            {cetEvent && <CetEventCard event={cetEvent} canManage={canManage} canRegister={canManage || user?.role === 'bienvenida'} user={user} />}
 
             {/* Events grid */}
             {regularEvents.length === 0 ? (

@@ -598,3 +598,23 @@ exports.linkCetOnMemberCreated = onDocumentCreated('members/{memberId}', async (
     await batch.commit()
     console.log(`linkCetOnMemberCreated: member=${event.params.memberId} conexiones=${connections.length}`)
 })
+
+// ---- CET: marcar la ficha cuando se vincula a quien conectó ----
+// Vincular desde la lista de CET la hace Bienvenida también, pero ese rol no
+// puede editar fichas de miembros (reglas) — así que la marca "Conectó en
+// CET" de la ficha se escribe acá, con Admin SDK, cada vez que una conexión
+// recibe (o cambia) su member_id. Es idempotente: si la función de arriba
+// ya marcó la ficha, esto deja el mismo valor.
+exports.markMemberOnCetLink = onDocumentWritten('cetConnections/{connectionId}', async (event) => {
+    const after = event.data?.after?.data()
+    if (!after?.member_id) return
+    const before = event.data?.before?.data()
+    if (before?.member_id === after.member_id) return
+
+    const memberRef = db.collection('members').doc(after.member_id)
+    const memberSnap = await memberRef.get()
+    if (!memberSnap.exists) return
+    const current = memberSnap.data().cet_connected_date
+    const earliest = current && current < after.edition_date ? current : after.edition_date
+    await memberRef.update({ connected_cet: true, cet_connected_date: earliest })
+})
