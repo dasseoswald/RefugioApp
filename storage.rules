@@ -12,6 +12,16 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*|video/.*');
     }
 
+    // Imagen de los eventos permanentes (CET, Bibliatón). Quién puede
+    // cambiarla lo decide firestore.rules (solo admin puede guardar la URL en
+    // el evento); aquí solo se limita tipo y tamaño.
+    match /eventPosters/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
     // Logo de cada iglesia (multi-iglesia). Lectura pública: se muestra en
     // el login/registro antes de que nadie inicie sesión. Escritura para
     // cualquier usuario autenticado, mismo criterio que "announcements" —

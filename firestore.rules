@@ -275,9 +275,15 @@ service cloud.firestore {
       allow create: if isStaff() || (isMinistryLeader() && request.resource.data.created_by_uid == request.auth.uid);
       // CET (evento permanente): cualquier líder de ministerio puede
       // activarlo/desactivarlo para una fecha, pero NADA más del evento.
-      allow update: if isStaff() || (isMinistryLeader() && resource.data.created_by_uid == request.auth.uid)
-        || (isMinistryLeader() && resource.data.get('event_type', '') == 'cet'
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_active', 'active_date', 'active_set_by']));
+      // La imagen de CET y Bibliatón (eventos permanentes) solo la cambia
+      // un administrador; el resto de lo que ya podía editar cada rol no
+      // cambia.
+      allow update: if hasRole('admin')
+        || (!(resource.data.get('event_type', '') in ['cet', 'bibliaton']
+              && request.resource.data.diff(resource.data).affectedKeys().hasAny(['poster_url', 'poster_path']))
+          && (isStaff() || (isMinistryLeader() && resource.data.created_by_uid == request.auth.uid)
+            || (isMinistryLeader() && resource.data.get('event_type', '') == 'cet'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_active', 'active_date', 'active_set_by']))));
       allow delete: if isStaff() || (isMinistryLeader() && resource.data.created_by_uid == request.auth.uid);
     }
     // Personas nuevas que se conectaron en CET (aún no son miembros ni

@@ -2385,6 +2385,15 @@ export function cancelChainSlotSignup(eventId, slotKey, memberId) {
     return true
 }
 
+// Imagen de un evento permanente (CET / Bibliatón): url + path en Storage
+// (el path sirve para borrar el archivo anterior al reemplazarla).
+export function setEventPoster(eventId, url, path) {
+    const patch = { poster_url: url || null, poster_path: path || null }
+    EVENTS = EVENTS.map(e => (e.id === eventId ? { ...e, ...patch } : e))
+    updateDoc(doc(db, 'events', eventId), patch).catch(err => console.error('No se pudo guardar la imagen del evento', err))
+    notifyEventListeners()
+}
+
 // ---- CET (Cielo en la Tierra) ----
 // Evento PERMANENTE de adoración pública (un solo documento events/cet que
 // nunca se borra) con su propio ciclo: se "activa" para una fecha elegida y

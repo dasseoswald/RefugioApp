@@ -7,6 +7,7 @@ import {
 } from '../../data/mockData.js'
 import { getWhatsAppUrl } from '../../lib/whatsapp.js'
 import Modal from '../ui/Modal.jsx'
+import EventPosterControl, { posterHeaderStyle } from './EventPosterControl.jsx'
 import {
     Sparkles, Power, PowerOff, Users, UserPlus, Phone, Mail, FileSpreadsheet, Trash2, Link2,
     CheckCircle2, Search, X, CalendarDays, Megaphone,
@@ -153,9 +154,10 @@ export default function CetEventCard({ event, canManage, canRegister = canManage
     return (
         <>
             <div className="rounded-2xl overflow-hidden shadow-[0_2px_12px_rgba(38,150,210,0.08)] bg-white">
-                <div className="p-6 text-white relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #010101 0%, #1D74A8 60%, #E8A838 100%)' }}>
+                <div className="p-6 text-white relative overflow-hidden" style={posterHeaderStyle(event, 'linear-gradient(135deg, #010101 0%, #1D74A8 60%, #E8A838 100%)')}>
                     <div className="absolute top-0 right-0 w-40 h-40 rounded-full opacity-10"
                         style={{ background: 'radial-gradient(circle, white, transparent)', transform: 'translate(30%, -30%)' }}></div>
+                    {user?.role === 'admin' && <EventPosterControl event={event} className="relative z-10 mb-3 justify-end" />}
                     <div className="relative flex items-start justify-between gap-4 flex-wrap">
                         <div className="flex items-start gap-4">
                             <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
