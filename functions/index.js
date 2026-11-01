@@ -618,3 +618,17 @@ exports.markMemberOnCetLink = onDocumentWritten('cetConnections/{connectionId}',
     const earliest = current && current < after.edition_date ? current : after.edition_date
     await memberRef.update({ connected_cet: true, cet_connected_date: earliest })
 })
+
+// ---- Bibliatón: total de biblias en el evento ----
+// El contador lo ve cualquiera (tarjeta del evento), pero la lista de
+// donantes solo Administración y Bienvenida — por eso el total se recalcula
+// acá, con Admin SDK, cada vez que cambia una donación y se guarda en el
+// propio evento.
+exports.updateBibliatonTotal = onDocumentWritten('bibliatonDonations/{donationId}', async () => {
+    const snap = await db.collection('bibliatonDonations').get()
+    let total = 0
+    snap.forEach(d => { total += Number(d.data().bibles) || 0 })
+    await db.collection('events').doc('bibliaton')
+        .update({ total_bibles: total, donors_count: snap.size })
+        .catch(err => console.error('updateBibliatonTotal: el evento Bibliatón aún no existe', err.message))
+})

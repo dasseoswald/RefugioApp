@@ -7,8 +7,10 @@ import {
     setEventRegistrationPaymentMethod, getMemberById,
     getChainSlots, subscribeChainSignups, getChainSignupsForEvent, signUpForChainSlot, cancelChainSlotSignup,
     ensureCetEvent, getCetEvent, CET_EVENT_ID,
+    ensureBibliatonEvent, getBibliatonEvent, BIBLIATON_EVENT_ID,
 } from '../../data/mockData.js'
 import CetEventCard from '../../components/shared/CetEventCard.jsx'
+import BibliatonCard from '../../components/shared/BibliatonCard.jsx'
 import Modal from '../../components/ui/Modal.jsx'
 import {
     PartyPopper, Plus, Calendar, Clock, MapPin, DollarSign, Image as ImageIcon,
@@ -78,11 +80,15 @@ export default function EventsPage() {
     // eventos abre esta pantalla (y los eventos ya cargaron) se crea; desde
     // entonces lo ven todos, y nunca se borra.
     useEffect(() => {
-        if (canManage) ensureCetEvent(user?.name, user?.auth_uid)
+        if (canManage) {
+            ensureCetEvent(user?.name, user?.auth_uid)
+            ensureBibliatonEvent(user?.name, user?.auth_uid)
+        }
     }, [events, canManage, user?.name, user?.auth_uid])
 
     const cetEvent = getCetEvent()
-    const regularEvents = events.filter(e => e.id !== CET_EVENT_ID)
+    const bibliatonEvent = getBibliatonEvent()
+    const regularEvents = events.filter(e => e.id !== CET_EVENT_ID && e.id !== BIBLIATON_EVENT_ID)
 
     const showNotification = (message) => {
         setNotification(message)
@@ -259,6 +265,10 @@ export default function EventsPage() {
             )}
 
             {cetEvent && <CetEventCard event={cetEvent} canManage={canManage} canRegister={canManage || user?.role === 'bienvenida'} user={user} />}
+            {bibliatonEvent && (
+                <BibliatonCard event={bibliatonEvent} canManage={user?.role === 'admin' || user?.role === 'controller'}
+                    canRegister={user?.role === 'admin' || user?.role === 'bienvenida'} user={user} />
+            )}
 
             {/* Events grid */}
             {regularEvents.length === 0 ? (

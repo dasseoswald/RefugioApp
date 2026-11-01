@@ -283,6 +283,11 @@ service cloud.firestore {
     // Personas nuevas que se conectaron en CET (aún no son miembros ni
     // visitantes): datos de contacto de gente que no es de la iglesia, así
     // que solo el equipo, los líderes y Bienvenida los ven o tocan.
+    // Donantes del Bibliatón (hermanos, miembros o no, con las biblias que
+    // donarán): los registra y consulta solo Administración y Bienvenida.
+    match /bibliatonDonations/{docId} {
+      allow read, create, update, delete: if hasRole('admin') || hasRole('bienvenida');
+    }
     match /cetConnections/{docId} {
       allow read, create, update, delete: if isStaff() || isMinistryLeader() || hasRole('bienvenida');
     }
@@ -413,7 +418,7 @@ service cloud.firestore {
     // aprobado (no cualquier cuenta de Google autenticada).
     match /{collection}/{docId} {
       allow read, write: if isMiembro()
-        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'groupSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings', 'activities', 'services', 'settings', 'notifications', 'conversations', 'churches', 'userLookup', 'refugios', 'refugioEnrollments', 'cetConnections']);
+        && !(collection in ['offerings', 'tithes', 'userRoles', 'users', 'members', 'attendances', 'groupNotices', 'generalMessages', 'radioMessages', 'bibleHighlights', 'bibleComments', 'buenaTierraClasses', 'buenaTierraSettings', 'groupSettings', 'events', 'eventRegistrations', 'eventChainSignups', 'ministryOfferings', 'activities', 'services', 'settings', 'notifications', 'conversations', 'churches', 'userLookup', 'refugios', 'refugioEnrollments', 'cetConnections', 'bibliatonDonations']);
     }
   }
 }

@@ -2572,6 +2572,135 @@ export function linkCetConnectionToMember(connectionId, memberId) {
     return true
 }
 
+// ---- Bibliatón ----
+// Evento permanente (events/bibliaton) con una meta de biblias a donar
+// (100 por defecto). Quien administra o es de Bienvenida registra a cada
+// hermano —miembro de la app o no— junto con las biblias que donará; el
+// contador suma todas las entradas de bibliatonDonations. El total también
+// se guarda en el evento (total_bibles, lo mantiene el servidor, ver
+// updateBibliatonTotal en functions/index.js) para que cualquiera vea el
+// avance aunque no pueda leer la lista de donantes.
+export const BIBLIATON_EVENT_ID = 'bibliaton'
+export const BIBLIATON_DEFAULT_GOAL = 100
+
+export function getBibliatonEvent() {
+    return EVENTS.find(e => e.id === BIBLIATON_EVENT_ID) || null
+}
+
+export function ensureBibliatonEvent(createdBy, createdByUid) {
+    if (!eventsLoaded || getBibliatonEvent()) return
+    const base = {
+        name: 'Bibliatón',
+        description: 'Meta: reunir biblias para donar. Cada hermano se anota con las biblias que va a donar.',
+        event_type: 'bibliaton',
+        is_permanent: true,
+        goal_bibles: BIBLIATON_DEFAULT_GOAL,
+        start_date: localDateString(),
+        days: 1,
+        starts_at: '',
+        ends_at: '',
+        location: '',
+        price: 'Gratis',
+        poster_url: null,
+        created_by: createdBy || null,
+        created_by_uid: createdByUid || null,
+        created_at: new Date().toISOString(),
+    }
+    EVENTS = [...EVENTS, { id: BIBLIATON_EVENT_ID, ...base }]
+    setDoc(doc(db, 'events', BIBLIATON_EVENT_ID), base, { merge: true }).catch(err => console.error('No se pudo crear el Bibliatón', err))
+    notifyEventListeners()
+}
+
+// Meta de biblias y fecha (opcional) del evento.
+export function updateBibliatonSettings({ goal, eventDate }) {
+    const patch = { goal_bibles: Math.max(1, parseInt(goal) || BIBLIATON_DEFAULT_GOAL), event_date: eventDate || null }
+    EVENTS = EVENTS.map(e => (e.id === BIBLIATON_EVENT_ID ? { ...e, ...patch } : e))
+    updateDoc(doc(db, 'events', BIBLIATON_EVENT_ID), patch).catch(err => console.error('No se pudo actualizar el Bibliatón', err))
+    notifyEventListeners()
+}
+
+let BIBLIATON_DONATIONS = []
+let bibliatonListeners = []
+let bibliatonSyncStarted = false
+
+function notifyBibliatonListeners() { bibliatonListeners.forEach(fn => fn()) }
+
+function startBibliatonSync() {
+    if (bibliatonSyncStarted) return
+    bibliatonSyncStarted = true
+    onSnapshot(collection(db, 'bibliatonDonations'), (snap) => {
+        BIBLIATON_DONATIONS = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        notifyBibliatonListeners()
+    }, (err) => console.error('Error sincronizando las donaciones del Bibliatón', err))
+}
+
+export function subscribeBibliatonDonations(callback) {
+    bibliatonListeners.push(callback)
+    startBibliatonSync()
+    return () => { bibliatonListeners = bibliatonListeners.filter(fn => fn !== callback) }
+}
+
+export function getBibliatonDonations() {
+    return [...BIBLIATON_DONATIONS].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+}
+
+export function getBibliatonTotal() {
+    return BIBLIATON_DONATIONS.reduce((sum, d) => sum + (Number(d.bibles) || 0), 0)
+}
+
+// data: { member_id? (si ya es miembro), name, phone, email, bibles, notes }
+export function addBibliatonDonation(data, registeredBy) {
+    const bibles = parseInt(data.bibles)
+    if (!(bibles >= 1)) return { error: 'Indica cuántas biblias va a donar (mínimo 1)' }
+
+    const member = data.member_id ? getMemberById(data.member_id) : null
+    if (data.member_id && !member) return { error: 'No se encontró al miembro' }
+    const name = member ? member.full_name : (data.name || '').trim()
+    if (!name) return { error: 'El nombre es obligatorio' }
+    const phone = member ? (member.phone || '') : (data.phone || '').trim()
+    const email = member ? (member.email || '') : (data.email || '').trim().toLowerCase()
+    const phoneKey = phoneKeyOf(phone)
+
+    const duplicate = BIBLIATON_DONATIONS.find(d =>
+        (member && d.member_id === member.id) || (!member && phoneKey && d.phone_key === phoneKey)
+    )
+    if (duplicate) return { error: `${duplicate.name} ya está registrado con ${duplicate.bibles} biblia${duplicate.bibles === 1 ? '' : 's'} — edítalo en la lista` }
+
+    const id = `bibliaton-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    const donation = {
+        event_id: BIBLIATON_EVENT_ID,
+        member_id: member ? member.id : null,
+        is_member: !!member,
+        name,
+        phone,
+        phone_key: phoneKey,
+        email,
+        bibles,
+        notes: (data.notes || '').trim(),
+        registered_by: registeredBy?.name || null,
+        registered_by_uid: registeredBy?.uid || null,
+        created_at: new Date().toISOString(),
+    }
+    BIBLIATON_DONATIONS = [...BIBLIATON_DONATIONS, { id, ...donation }]
+    setDoc(doc(db, 'bibliatonDonations', id), donation).catch(err => console.error('No se pudo guardar la donación', err))
+    notifyBibliatonListeners()
+    return { data: { id, ...donation } }
+}
+
+export function setBibliatonDonationBibles(id, bibles) {
+    const value = parseInt(bibles)
+    if (!(value >= 1)) return
+    BIBLIATON_DONATIONS = BIBLIATON_DONATIONS.map(d => (d.id === id ? { ...d, bibles: value } : d))
+    updateDoc(doc(db, 'bibliatonDonations', id), { bibles: value }).catch(err => console.error('No se pudo actualizar la donación', err))
+    notifyBibliatonListeners()
+}
+
+export function deleteBibliatonDonation(id) {
+    BIBLIATON_DONATIONS = BIBLIATON_DONATIONS.filter(d => d.id !== id)
+    deleteDoc(doc(db, 'bibliatonDonations', id)).catch(err => console.error('No se pudo borrar la donación', err))
+    notifyBibliatonListeners()
+}
+
 // ---- Calendario de actividades ----
 // Slide compartido donde cualquier líder de ministerio (o el equipo) puede
 // agregar una actividad — distinto de "Eventos" (que tiene afiche, cupos,
