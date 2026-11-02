@@ -2590,6 +2590,7 @@ export function linkCetConnectionToMember(connectionId, memberId) {
 // updateBibliatonTotal en functions/index.js) para que cualquiera vea el
 // avance aunque no pueda leer la lista de donantes.
 export const BIBLIATON_EVENT_ID = 'bibliaton'
+export const BIBLIATON_PAYMENT_METHODS = ['efectivo', 'transferencia']
 export const BIBLIATON_DEFAULT_GOAL = 100
 
 export function getBibliatonEvent() {
@@ -2685,6 +2686,8 @@ export function addBibliatonDonation(data, registeredBy) {
         phone_key: phoneKey,
         email,
         bibles,
+        paid: !!data.paid,
+        payment_method: data.paid && BIBLIATON_PAYMENT_METHODS.includes(data.payment_method) ? data.payment_method : null,
         notes: (data.notes || '').trim(),
         registered_by: registeredBy?.name || null,
         registered_by_uid: registeredBy?.uid || null,
@@ -2701,6 +2704,28 @@ export function setBibliatonDonationBibles(id, bibles) {
     if (!(value >= 1)) return
     BIBLIATON_DONATIONS = BIBLIATON_DONATIONS.map(d => (d.id === id ? { ...d, bibles: value } : d))
     updateDoc(doc(db, 'bibliatonDonations', id), { bibles: value }).catch(err => console.error('No se pudo actualizar la donación', err))
+    notifyBibliatonListeners()
+}
+
+// Pago y nota de un registro ya existente. Los registros anteriores no traen
+// estos campos: se leen como "pendiente", sin forma de pago y con su nota.
+// changes: { paid?, payment_method?, notes? }. Si queda pendiente se borra
+// la forma de pago (solo tiene sentido cuando ya pagó).
+export function updateBibliatonDonation(id, changes) {
+    const current = BIBLIATON_DONATIONS.find(d => d.id === id)
+    if (!current) return
+    const patch = {}
+    if ('paid' in changes) {
+        patch.paid = !!changes.paid
+        if (!patch.paid) patch.payment_method = null
+    }
+    if ('payment_method' in changes && (patch.paid ?? current.paid)) {
+        patch.payment_method = BIBLIATON_PAYMENT_METHODS.includes(changes.payment_method) ? changes.payment_method : null
+    }
+    if ('notes' in changes) patch.notes = (changes.notes || '').trim()
+    if (Object.keys(patch).length === 0) return
+    BIBLIATON_DONATIONS = BIBLIATON_DONATIONS.map(d => (d.id === id ? { ...d, ...patch } : d))
+    updateDoc(doc(db, 'bibliatonDonations', id), patch).catch(err => console.error('No se pudo actualizar la donación', err))
     notifyBibliatonListeners()
 }
 

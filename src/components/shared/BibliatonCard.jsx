@@ -4,17 +4,59 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import {
     subscribeBibliatonDonations, getBibliatonDonations, getBibliatonTotal, addBibliatonDonation,
-    setBibliatonDonationBibles, deleteBibliatonDonation, updateBibliatonSettings, getMembers, BIBLIATON_DEFAULT_GOAL,
+    setBibliatonDonationBibles, updateBibliatonDonation, deleteBibliatonDonation, updateBibliatonSettings, getMembers, BIBLIATON_DEFAULT_GOAL,
 } from '../../data/mockData.js'
 import { getWhatsAppUrl } from '../../lib/whatsapp.js'
 import Modal from '../ui/Modal.jsx'
 import EventPosterControl, { posterHeaderStyle } from './EventPosterControl.jsx'
 import {
     BookOpen, UserPlus, ListChecks, Settings, Search, X, Trash2, Minus, Plus, Phone, Mail,
-    FileSpreadsheet, FileText, CheckCircle2, Target,
+    FileSpreadsheet, FileText, CheckCircle2, Target, Banknote, ArrowRightLeft, Clock,
 } from 'lucide-react'
 
-const EMPTY_FORM = { name: '', phone: '', email: '', bibles: 1, notes: '' }
+const EMPTY_FORM = { name: '', phone: '', email: '', bibles: 1, notes: '', paid: false, payment_method: null }
+
+const METHOD_LABELS = { efectivo: 'Efectivo', transferencia: 'Transferencia' }
+
+// Viñetas de pago: "Pagado / Pendiente" y, si ya pagó, "Efectivo / Transferencia".
+function PaymentChips({ paid, method, onPaid, onMethod, compact = false }) {
+    const base = `flex items-center gap-1 rounded-full font-bold border-2 cursor-pointer transition-colors ${compact ? 'px-2.5 py-0.5 text-[11px]' : 'px-3.5 py-1.5 text-xs'}`
+    return (
+        <div className="flex flex-wrap items-center gap-1.5">
+            <button type="button" onClick={() => onPaid(!paid)} title={paid ? 'Marcar como pendiente' : 'Marcar como pagado'}
+                className={`${base} ${paid ? 'border-[#13CD68] bg-[#E1F9EC] text-[#0FA855]' : 'border-[#F5B041] bg-[#FEF5E7] text-[#B9770E]'}`}>
+                {paid ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                {paid ? 'Pagado' : 'Pendiente'}
+            </button>
+            {paid && (
+                <>
+                    <button type="button" onClick={() => onMethod(method === 'efectivo' ? null : 'efectivo')}
+                        className={`${base} ${method === 'efectivo' ? 'border-[#2696D2] bg-[#E8F4FC] text-[#1D74A8]' : 'border-gray-200 text-[#6E6E6E] hover:bg-gray-50'}`}>
+                        <Banknote className="w-3 h-3" /> Efectivo
+                    </button>
+                    <button type="button" onClick={() => onMethod(method === 'transferencia' ? null : 'transferencia')}
+                        className={`${base} ${method === 'transferencia' ? 'border-[#2696D2] bg-[#E8F4FC] text-[#1D74A8]' : 'border-gray-200 text-[#6E6E6E] hover:bg-gray-50'}`}>
+                        <ArrowRightLeft className="w-3 h-3" /> Transferencia
+                    </button>
+                </>
+            )}
+        </div>
+    )
+}
+
+// Nota de un registro (para cualquier inconveniente): se guarda al salir del
+// campo o con Enter.
+function NoteField({ value, onSave }) {
+    const [text, setText] = useState(value || '')
+    useEffect(() => { setText(value || '') }, [value])
+    const commit = () => { if (text.trim() !== (value || '')) onSave(text) }
+    return (
+        <input type="text" value={text} onChange={(e) => setText(e.target.value)} onBlur={commit}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+            placeholder="Nota (ej. falta pagar, se cambió el monto...)"
+            className="w-full sm:w-72 px-3 py-1.5 rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-[#2696D2] text-xs" />
+    )
+}
 
 function formatDate(dateStr) {
     if (!dateStr) return ''
@@ -65,6 +107,7 @@ export default function BibliatonCard({ event, canManage, canRegister, user }) {
     const percent = Math.min(100, Math.round((total / goal) * 100))
     const remaining = Math.max(0, goal - total)
     const goalReached = total >= goal
+    const paidCount = donations.filter(d => d.paid).length
 
     const memberCandidates = useMemo(() => {
         const term = memberSearch.trim().toLowerCase()
@@ -120,23 +163,23 @@ export default function BibliatonCard({ event, canManage, canRegister, user }) {
 
     const exportRows = () => filteredDonations.map((d, i) => [
         i + 1, d.name, d.is_member ? 'Miembro' : 'No miembro', d.phone || '-', d.email || '-',
-        d.bibles, d.notes || '-', d.registered_by || '-', new Date(d.created_at).toLocaleDateString('es'),
+        d.bibles, d.paid ? 'Pagado' : 'Pendiente', d.paid ? (METHOD_LABELS[d.payment_method] || '-') : '-', d.notes || '-', d.registered_by || '-', new Date(d.created_at).toLocaleDateString('es'),
     ])
 
     const exportToExcel = () => {
         const totalShown = filteredDonations.reduce((sum, d) => sum + (Number(d.bibles) || 0), 0)
         const wsData = [
             ['Bibliatón — Biblias a donar'],
-            [`Meta: ${goal} biblias`, `Reunidas: ${total}`, `Personas: ${donations.length}`],
+            [`Meta: ${goal} biblias`, `Reunidas: ${total}`, `Personas: ${donations.length}`, `Pagados: ${paidCount}`, `Pendientes: ${donations.length - paidCount}`],
             [],
-            ['#', 'Nombre', 'Tipo', 'Teléfono', 'Correo', 'Biblias', 'Nota', 'Registrado por', 'Fecha'],
+            ['#', 'Nombre', 'Tipo', 'Teléfono', 'Correo', 'Biblias', 'Pago', 'Forma de pago', 'Nota', 'Registrado por', 'Fecha'],
             ...exportRows(),
             [],
             ['', '', '', '', 'TOTAL', totalShown],
         ]
         const wb = XLSX.utils.book_new()
         const ws = XLSX.utils.aoa_to_sheet(wsData)
-        ws['!cols'] = [{ wch: 5 }, { wch: 30 }, { wch: 12 }, { wch: 18 }, { wch: 28 }, { wch: 9 }, { wch: 30 }, { wch: 20 }, { wch: 12 }]
+        ws['!cols'] = [{ wch: 5 }, { wch: 30 }, { wch: 12 }, { wch: 18 }, { wch: 28 }, { wch: 9 }, { wch: 12 }, { wch: 15 }, { wch: 30 }, { wch: 20 }, { wch: 12 }]
         XLSX.utils.book_append_sheet(wb, ws, 'Bibliatón')
         XLSX.writeFile(wb, `Bibliaton_${new Date().toISOString().split('T')[0]}.xlsx`)
     }
@@ -148,11 +191,11 @@ export default function BibliatonCard({ event, canManage, canRegister, user }) {
         doc.text('Bibliatón — Biblias a donar', 14, 20)
         doc.setFontSize(11)
         doc.setTextColor(127, 140, 141)
-        doc.text(`Reunidas: ${total} de ${goal} biblias — ${donations.length} personas`, 14, 28)
+        doc.text(`Reunidas: ${total} de ${goal} biblias — ${donations.length} personas (${paidCount} pagados, ${donations.length - paidCount} pendientes)`, 14, 28)
         autoTable(doc, {
             startY: 34,
-            head: [['#', 'Nombre', 'Tipo', 'Teléfono', 'Correo', 'Biblias', 'Nota', 'Registrado por']],
-            body: exportRows().map(r => r.slice(0, 8)),
+            head: [['#', 'Nombre', 'Tipo', 'Teléfono', 'Correo', 'Biblias', 'Pago', 'Forma de pago', 'Nota', 'Registrado por']],
+            body: exportRows().map(r => r.slice(0, 10)),
             styles: { font: 'helvetica', fontSize: 8, cellPadding: 3 },
             headStyles: { fillColor: [74, 111, 165], textColor: 255, fontStyle: 'bold' },
             alternateRowStyles: { fillColor: [240, 246, 255] },
@@ -308,6 +351,13 @@ export default function BibliatonCard({ event, canManage, canRegister, user }) {
                         </div>
                     </div>
 
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <label className="text-sm font-medium text-[#111111]">Pago</label>
+                        <PaymentChips paid={form.paid} method={form.payment_method}
+                            onPaid={(paid) => setForm(f => ({ ...f, paid, payment_method: paid ? f.payment_method : null }))}
+                            onMethod={(payment_method) => setForm(f => ({ ...f, payment_method }))} />
+                    </div>
+
                     <input type="text" value={form.notes} onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}
                         placeholder="Nota (opcional)" className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-100 bg-white focus:outline-none focus:border-[#13CD68] text-sm" />
 
@@ -328,7 +378,7 @@ export default function BibliatonCard({ event, canManage, canRegister, user }) {
             <Modal isOpen={showList} onClose={() => setShowList(false)} title="Lista del Bibliatón" size="xl">
                 <div className="space-y-4">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
-                        <p className="text-sm text-[#6E6E6E]"><strong className="text-[#111111]">{total}</strong> de {goal} biblias · {donations.length} persona{donations.length === 1 ? '' : 's'}</p>
+                        <p className="text-sm text-[#6E6E6E]"><strong className="text-[#111111]">{total}</strong> de {goal} biblias · {donations.length} persona{donations.length === 1 ? '' : 's'} · <span className="text-[#0FA855] font-medium">{paidCount} pagado{paidCount === 1 ? '' : 's'}</span> · <span className="text-[#B9770E] font-medium">{donations.length - paidCount} pendiente{donations.length - paidCount === 1 ? '' : 's'}</span></p>
                         {donations.length > 0 && (
                             <div className="flex gap-2">
                                 <button onClick={exportToPDF}
@@ -356,7 +406,7 @@ export default function BibliatonCard({ event, canManage, canRegister, user }) {
                             {filteredDonations.map(d => {
                                 const whatsappUrl = getWhatsAppUrl(d.phone)
                                 return (
-                                    <div key={d.id} className="flex items-center gap-3 py-3">
+                                    <div key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
                                         <div className="min-w-0 flex-1">
                                             <p className="text-sm font-medium text-[#111111]">
                                                 {d.name}
@@ -369,7 +419,6 @@ export default function BibliatonCard({ event, canManage, canRegister, user }) {
                                                 {d.email && <span className="text-xs text-[#6E6E6E] flex items-center gap-1"><Mail className="w-3 h-3" /> {d.email}</span>}
                                                 {d.registered_by && <span className="text-xs text-[#6E6E6E]">Registró: {d.registered_by}</span>}
                                             </div>
-                                            {d.notes && <p className="text-xs text-[#6E6E6E] mt-1 italic">{d.notes}</p>}
                                         </div>
                                         <div className="flex items-center gap-1.5 flex-shrink-0">
                                             <button onClick={() => setBibliatonDonationBibles(d.id, d.bibles - 1)} disabled={d.bibles <= 1}
@@ -389,6 +438,12 @@ export default function BibliatonCard({ event, canManage, canRegister, user }) {
                                                 className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-red-50 transition-colors cursor-pointer">
                                                 <Trash2 className="w-4 h-4 text-[#E74C3C]" />
                                             </button>
+                                        </div>
+                                        <div className="basis-full flex flex-wrap items-center gap-x-3 gap-y-2">
+                                            <PaymentChips compact paid={!!d.paid} method={d.payment_method}
+                                                onPaid={(paid) => updateBibliatonDonation(d.id, { paid })}
+                                                onMethod={(payment_method) => updateBibliatonDonation(d.id, { payment_method })} />
+                                            <NoteField value={d.notes} onSave={(notes) => updateBibliatonDonation(d.id, { notes })} />
                                         </div>
                                     </div>
                                 )
