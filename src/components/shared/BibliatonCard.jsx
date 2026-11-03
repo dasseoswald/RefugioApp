@@ -4,7 +4,7 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import {
     subscribeBibliatonDonations, getBibliatonDonations, getBibliatonTotal, addBibliatonDonation,
-    setBibliatonDonationBibles, updateBibliatonDonation, deleteBibliatonDonation, updateBibliatonSettings, getMembers, BIBLIATON_DEFAULT_GOAL,
+    setBibliatonDonationBibles, updateBibliatonDonation, deleteBibliatonDonation, updateBibliatonSettings, getMembers, getMemberById, BIBLIATON_DEFAULT_GOAL,
 } from '../../data/mockData.js'
 import { getWhatsAppUrl } from '../../lib/whatsapp.js'
 import Modal from '../ui/Modal.jsx'
@@ -15,6 +15,10 @@ import {
 } from 'lucide-react'
 
 const EMPTY_FORM = { name: '', phone: '', email: '', bibles: 1, notes: '', paid: false, payment_method: null }
+
+// Teléfono del registro: el que se anotó al inscribirlo o, si no hay, el que
+// hoy tiene su ficha de miembro.
+const phoneOf = (d) => d.phone || (d.member_id ? getMemberById(d.member_id)?.phone : '') || ''
 
 const METHOD_LABELS = { efectivo: 'Efectivo', transferencia: 'Transferencia' }
 
@@ -162,7 +166,7 @@ export default function BibliatonCard({ event, canManage, canRegister, user }) {
     }
 
     const exportRows = () => filteredDonations.map((d, i) => [
-        i + 1, d.name, d.is_member ? 'Miembro' : 'No miembro', d.phone || '-', d.email || '-',
+        i + 1, d.name, d.is_member ? 'Miembro' : 'No miembro', phoneOf(d) || '-', d.email || '-',
         d.bibles, d.paid ? 'Pagado' : 'Pendiente', d.paid ? (METHOD_LABELS[d.payment_method] || '-') : '-', d.notes || '-', d.registered_by || '-', new Date(d.created_at).toLocaleDateString('es'),
     ])
 
@@ -404,7 +408,8 @@ export default function BibliatonCard({ event, canManage, canRegister, user }) {
                     ) : (
                         <div className="max-h-[50vh] overflow-y-auto divide-y divide-gray-50">
                             {filteredDonations.map(d => {
-                                const whatsappUrl = getWhatsAppUrl(d.phone)
+                                const phone = phoneOf(d)
+                                const whatsappUrl = getWhatsAppUrl(phone)
                                 return (
                                     <div key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
                                         <div className="min-w-0 flex-1">
@@ -415,7 +420,7 @@ export default function BibliatonCard({ event, canManage, canRegister, user }) {
                                                 </span>
                                             </p>
                                             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
-                                                {d.phone && <span className="text-xs text-[#6E6E6E] flex items-center gap-1"><Phone className="w-3 h-3" /> {d.phone}</span>}
+                                                {phone && <span className="text-xs text-[#6E6E6E] flex items-center gap-1"><Phone className="w-3 h-3" /> {phone}</span>}
                                                 {d.email && <span className="text-xs text-[#6E6E6E] flex items-center gap-1"><Mail className="w-3 h-3" /> {d.email}</span>}
                                                 {d.registered_by && <span className="text-xs text-[#6E6E6E]">Registró: {d.registered_by}</span>}
                                             </div>
@@ -429,9 +434,10 @@ export default function BibliatonCard({ event, canManage, canRegister, user }) {
                                         </div>
                                         <div className="flex items-center gap-1 flex-shrink-0">
                                             {whatsappUrl && (
-                                                <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" title="Escribir por WhatsApp"
-                                                    className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#E1F9EC] transition-colors">
-                                                    <WhatsAppIcon className="w-4 h-4 text-[#25D366]" />
+                                                <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" title={`Escribir a ${d.name} por WhatsApp`}
+                                                    className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-bold text-white hover:shadow-md transition-shadow"
+                                                    style={{ background: '#25D366' }}>
+                                                    <WhatsAppIcon className="w-4 h-4" /> WhatsApp
                                                 </a>
                                             )}
                                             <button onClick={() => deleteBibliatonDonation(d.id)} title="Quitar de la lista"
