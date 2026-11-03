@@ -20,6 +20,21 @@ const EMPTY_FORM = { name: '', phone: '', email: '', bibles: 1, notes: '', paid:
 // hoy tiene su ficha de miembro.
 const phoneOf = (d) => d.phone || (d.member_id ? getMemberById(d.member_id)?.phone : '') || ''
 
+// Fecha tope para entregar las biblias; va en el recordatorio de WhatsApp.
+const DEADLINE_TEXT = 'domingo 8 de noviembre'
+
+// Mensaje de ánimo para quien aún no ha aportado: lleva su nombre y sus biblias.
+function reminderMessage(d) {
+    const firstName = (d.name || '').trim().split(/\s+/)[0]
+    const n = Number(d.bibles) || 1
+    return `Hola ${firstName}, ¡la paz de Dios sea contigo! 🙏 Te escribimos desde Un Refugio para la Familia.\n\n` +
+        `Queremos agradecerte de corazón por sumarte al Bibliatón y comprometerte a donar ${n} biblia${n === 1 ? '' : 's'}. ` +
+        `Tu aporte llegará a manos de personas que necesitan conocer la Palabra de Dios, y eso es una bendición enorme. 💚\n\n` +
+        `Te recordamos con mucho cariño que la fecha tope para entregar tu aporte es el ${DEADLINE_TEXT}. ` +
+        `Si tienes alguna duda o algún inconveniente, cuéntanos y con gusto te ayudamos.\n\n` +
+        `¡Dios ama al dador alegre! (2 Corintios 9:7). Gracias por tu corazón generoso. 🙌`
+}
+
 const METHOD_LABELS = { efectivo: 'Efectivo', transferencia: 'Transferencia' }
 
 // Viñetas de pago: "Pagado / Pendiente" y, si ya pagó, "Efectivo / Transferencia".
@@ -409,7 +424,7 @@ export default function BibliatonCard({ event, canManage, canRegister, user }) {
                         <div className="max-h-[50vh] overflow-y-auto divide-y divide-gray-50">
                             {filteredDonations.map(d => {
                                 const phone = phoneOf(d)
-                                const whatsappUrl = getWhatsAppUrl(phone)
+                                const whatsappUrl = getWhatsAppUrl(phone, d.paid ? undefined : reminderMessage(d))
                                 return (
                                     <div key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
                                         <div className="min-w-0 flex-1">
@@ -434,10 +449,10 @@ export default function BibliatonCard({ event, canManage, canRegister, user }) {
                                         </div>
                                         <div className="flex items-center gap-1 flex-shrink-0">
                                             {whatsappUrl && (
-                                                <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" title={`Escribir a ${d.name} por WhatsApp`}
+                                                <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" title={d.paid ? `Escribir a ${d.name} por WhatsApp` : `Enviar recordatorio a ${d.name} por WhatsApp`}
                                                     className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-bold text-white hover:shadow-md transition-shadow"
                                                     style={{ background: '#25D366' }}>
-                                                    <WhatsAppIcon className="w-4 h-4" /> WhatsApp
+                                                    <WhatsAppIcon className="w-4 h-4" /> {d.paid ? 'WhatsApp' : 'Recordar'}
                                                 </a>
                                             )}
                                             <button onClick={() => deleteBibliatonDonation(d.id)} title="Quitar de la lista"
