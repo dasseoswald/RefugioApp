@@ -42,6 +42,8 @@ function thanksMessage(d) {
     return `Hola ${firstName}, ¡la paz de Dios sea contigo! 🙏 Te escribimos desde Un Refugio para la Familia.\n\n` +
         `¡Muchas gracias por sumarte al Bibliatón y por tu aporte de ${n} biblia${n === 1 ? '' : 's'}! ` +
         `Sabemos que esta campaña bendecirá muchas vidas, y tú eres parte de eso. 💚\n\n` +
+        `Si quieres, también puedes sumarle un detalle significativo a tu biblia: una dedicatoria escrita a mano, un separador de biblia o algún otro detalle con cariño. ` +
+        `Esas palabras pueden llegar al corazón de quien la reciba. ✍️\n\n` +
         `Que el Señor multiplique tu generosidad y te devuelva con creces lo que has sembrado. ` +
         `Dios ama al dador alegre (2 Corintios 9:7). ¡Dios te bendiga grandemente! 🙌`
 }
