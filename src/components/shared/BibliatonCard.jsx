@@ -35,6 +35,17 @@ function reminderMessage(d) {
         `¡Dios ama al dador alegre! (2 Corintios 9:7). Gracias por tu corazón generoso. 🙌`
 }
 
+// Agradecimiento para quien ya pagó.
+function thanksMessage(d) {
+    const firstName = (d.name || '').trim().split(/\s+/)[0]
+    const n = Number(d.bibles) || 1
+    return `Hola ${firstName}, ¡la paz de Dios sea contigo! 🙏 Te escribimos desde Un Refugio para la Familia.\n\n` +
+        `¡Muchas gracias por sumarte al Bibliatón y por tu aporte de ${n} biblia${n === 1 ? '' : 's'}! ` +
+        `Sabemos que esta campaña bendecirá muchas vidas, y tú eres parte de eso. 💚\n\n` +
+        `Que el Señor multiplique tu generosidad y te devuelva con creces lo que has sembrado. ` +
+        `Dios ama al dador alegre (2 Corintios 9:7). ¡Dios te bendiga grandemente! 🙌`
+}
+
 const METHOD_LABELS = { efectivo: 'Efectivo', transferencia: 'Transferencia' }
 
 // Viñetas de pago: "Pagado / Pendiente" y, si ya pagó, "Efectivo / Transferencia".
@@ -424,7 +435,7 @@ export default function BibliatonCard({ event, canManage, canRegister, user }) {
                         <div className="max-h-[50vh] overflow-y-auto divide-y divide-gray-50">
                             {filteredDonations.map(d => {
                                 const phone = phoneOf(d)
-                                const whatsappUrl = getWhatsAppUrl(phone, d.paid ? undefined : reminderMessage(d))
+                                const whatsappUrl = getWhatsAppUrl(phone, d.paid ? thanksMessage(d) : reminderMessage(d))
                                 return (
                                     <div key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
                                         <div className="min-w-0 flex-1">
@@ -449,10 +460,10 @@ export default function BibliatonCard({ event, canManage, canRegister, user }) {
                                         </div>
                                         <div className="flex items-center gap-1 flex-shrink-0">
                                             {whatsappUrl && (
-                                                <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" title={d.paid ? `Escribir a ${d.name} por WhatsApp` : `Enviar recordatorio a ${d.name} por WhatsApp`}
+                                                <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" title={d.paid ? `Enviar agradecimiento a ${d.name} por WhatsApp` : `Enviar recordatorio a ${d.name} por WhatsApp`}
                                                     className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-bold text-white hover:shadow-md transition-shadow"
                                                     style={{ background: '#25D366' }}>
-                                                    <WhatsAppIcon className="w-4 h-4" /> {d.paid ? 'WhatsApp' : 'Recordar'}
+                                                    <WhatsAppIcon className="w-4 h-4" /> {d.paid ? 'Agradecer' : 'Recordar'}
                                                 </a>
                                             )}
                                             <button onClick={() => deleteBibliatonDonation(d.id)} title="Quitar de la lista"
