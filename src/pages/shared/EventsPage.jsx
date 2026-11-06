@@ -8,9 +8,11 @@ import {
     getChainSlots, subscribeChainSignups, getChainSignupsForEvent, signUpForChainSlot, cancelChainSlotSignup,
     ensureCetEvent, getCetEvent, CET_EVENT_ID,
     ensureBibliatonEvent, getBibliatonEvent, BIBLIATON_EVENT_ID,
+    ensureSesionAnualEvent, getSesionAnualEvent, SESION_ANUAL_EVENT_ID,
 } from '../../data/mockData.js'
 import CetEventCard from '../../components/shared/CetEventCard.jsx'
 import BibliatonCard from '../../components/shared/BibliatonCard.jsx'
+import SesionAnualCard from '../../components/shared/SesionAnualCard.jsx'
 import Modal from '../../components/ui/Modal.jsx'
 import {
     PartyPopper, Plus, Calendar, Clock, MapPin, DollarSign, Image as ImageIcon,
@@ -83,12 +85,14 @@ export default function EventsPage() {
         if (canManage) {
             ensureCetEvent(user?.name, user?.auth_uid)
             ensureBibliatonEvent(user?.name, user?.auth_uid)
+            ensureSesionAnualEvent(user?.name, user?.auth_uid)
         }
     }, [events, canManage, user?.name, user?.auth_uid])
 
     const cetEvent = getCetEvent()
     const bibliatonEvent = getBibliatonEvent()
-    const regularEvents = events.filter(e => e.id !== CET_EVENT_ID && e.id !== BIBLIATON_EVENT_ID)
+    const sesionAnualEvent = getSesionAnualEvent()
+    const regularEvents = events.filter(e => e.id !== CET_EVENT_ID && e.id !== BIBLIATON_EVENT_ID && e.id !== SESION_ANUAL_EVENT_ID)
 
     const showNotification = (message) => {
         setNotification(message)
@@ -269,6 +273,7 @@ export default function EventsPage() {
                 <BibliatonCard event={bibliatonEvent} canManage={user?.role === 'admin' || user?.role === 'controller'}
                     canRegister={user?.role === 'admin' || user?.role === 'bienvenida'} user={user} />
             )}
+            {sesionAnualEvent && <SesionAnualCard event={sesionAnualEvent} />}
 
             {/* Events grid */}
             {regularEvents.length === 0 ? (

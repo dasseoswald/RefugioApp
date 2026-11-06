@@ -2735,6 +2735,41 @@ export function deleteBibliatonDonation(id) {
     notifyBibliatonListeners()
 }
 
+// ---- Sesión Anual IML Coelemu 2026 ----
+// Evento permanente (events/sesion-anual-2026) que reúne la Revista
+// Compilatoria 2026. El PDF vive en public/ (se sirve sin iniciar sesión) y el
+// QR de la tarjeta apunta siempre a este mismo enlace: para actualizar la
+// revista basta reemplazar el archivo, el QR impreso sigue sirviendo.
+export const SESION_ANUAL_EVENT_ID = 'sesion-anual-2026'
+export const SESION_ANUAL_REVISTA_URL = 'https://unrefugioapp.vercel.app/revista-compilatoria-2026.pdf'
+
+export function getSesionAnualEvent() {
+    return EVENTS.find(e => e.id === SESION_ANUAL_EVENT_ID) || null
+}
+
+export function ensureSesionAnualEvent(createdBy, createdByUid) {
+    if (!eventsLoaded || getSesionAnualEvent()) return
+    const base = {
+        name: 'Sesión Anual IML Coelemu 2026',
+        description: 'Aquí está la Revista Compilatoria 2026 con los informes de la Sesión Anual. Ábrela o escanea el QR.',
+        event_type: 'sesion_anual',
+        is_permanent: true,
+        start_date: localDateString(),
+        days: 1,
+        starts_at: '',
+        ends_at: '',
+        location: '',
+        price: 'Gratis',
+        poster_url: null,
+        created_by: createdBy || null,
+        created_by_uid: createdByUid || null,
+        created_at: new Date().toISOString(),
+    }
+    EVENTS = [...EVENTS, { id: SESION_ANUAL_EVENT_ID, ...base }]
+    setDoc(doc(db, 'events', SESION_ANUAL_EVENT_ID), base, { merge: true }).catch(err => console.error('No se pudo crear la Sesión Anual', err))
+    notifyEventListeners()
+}
+
 // ---- Calendario de actividades ----
 // Slide compartido donde cualquier líder de ministerio (o el equipo) puede
 // agregar una actividad — distinto de "Eventos" (que tiene afiche, cupos,
